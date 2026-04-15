@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  auth-db:
+    image: postgres:17-alpine
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${AUTH_DB_NAME}
+      POSTGRES_USER: ${USER}
+      POSTGRES_PASSWORD: ${PASSWORD}
+    ports:
+      - "${AUTH_DB_PORT}:5432"
+
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth/Dockerfile
+    env_file:
+      - .env
+    depends_on:
+      - auth-db
+    ports:
+      - "8000:8000"
