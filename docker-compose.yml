@@ -10,7 +10,7 @@ services:
       POSTGRES_USER: ${USER}
       POSTGRES_PASSWORD: ${PASSWORD}
     ports:
-      - "${AUTH_DB_PORT_OUTSIDE}:${AUTH_DB_PORT_INSIDE}"
+      - "${AUTH_DB_PORT_OUTSIDE}:${DB_PORT_INSIDE}"
 
 
   auth-service:
@@ -23,3 +23,15 @@ services:
       - auth-db
     ports:
       - "8000:8000"
+
+
+  user-db:
+    image: postgres:17-alpine
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${USER_DB_NAME}
+      POSTGRES_USER: ${USER}
+      POSTGRES_PASSWORD: ${PASSWORD}
+    ports:
+      - "${USER_DB_PORT_OUTSIDE}:${DB_PORT_INSIDE}"
