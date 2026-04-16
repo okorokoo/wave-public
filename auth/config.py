@@ -12,11 +12,11 @@ class Settings(BaseSettings):
     PASSWORD: str
     AUTH_DB_NAME: str
     AUTH_DB_HOST: str
-    AUTH_DB_PORT: int
+    AUTH_DB_PORT_INSIDE: int
 
     @property
     def database_url(self) -> str:
-        return f"postgresql+asyncpg://{self.USER}:{self.PASSWORD}@{self.AUTH_DB_HOST}:5432/{self.AUTH_DB_NAME}"
+        return f"postgresql+asyncpg://{self.USER}:{self.PASSWORD}@{self.AUTH_DB_HOST}:{self.AUTH_DB_PORT_INSIDE}/{self.AUTH_DB_NAME}"
 
     # Секреты приложения
     SECRET_KEY: str = Field(..., description="Ключ для подписи JWT токенов")

@@ -8,9 +8,12 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # 3. Устанавливаем системные зависимости и Poetry
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    netcat-openbsd \
     && pip install poetry \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # 4. Создаем рабочую директорию внутри контейнера
 WORKDIR /auth
@@ -31,5 +34,10 @@ COPY auth/app/ /auth/app/
 COPY common/ /auth/common/
 COPY auth/config.py /auth/common/config.py
 
-# 7. Команда для запуска. Используем uvicorn.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+COPY auth/alembic.ini /auth/alembic.ini
+COPY auth/migrations/ /auth/migrations/
+
+COPY auth/entrypoint.sh .
+RUN chmod +x entrypoint.sh
+
+ENTRYPOINT ["/auth/entrypoint.sh"]
