@@ -2,7 +2,7 @@
 
 # Ждем, пока база станет доступна (используем nc - netcat)
 echo "Waiting for postgres..."
-while ! nc -z $AUTH_DB_HOST $AUTH_DB_PORT_INSIDE; do
+while ! nc -z $AUTH_DB_HOST $DB_PORT_INSIDE; do
   sleep 0.1
 done
 echo "PostgreSQL started"
