@@ -1,4 +1,6 @@
-from common.config import settings
+import uuid
+
+from app.models.models import Profile
 from fastapi import HTTPException, Security, APIRouter, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
@@ -6,9 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
-from app.models import Profile
-from app.schemas import ProfileRead, ProfileCreate
-from common.database import get_db
+from app.core.database import get_db
+from app.schemas.profile import ProfileRead, ProfileCreate, ProfileUpdate
+from app.services.profile import ProfileService
+from config import settings
 
 router = APIRouter(prefix="/v1")
 
@@ -82,3 +85,13 @@ async def create_profile(
 
     await db.refresh(new_profile)
     return new_profile
+
+
+@router.patch("/me", response_model=ProfileRead)
+async def update_profile(
+    update_data: ProfileUpdate,
+    user_id: uuid.UUID = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    service = ProfileService(db)
+    return await service.update_my_profile(user_id, update_data)

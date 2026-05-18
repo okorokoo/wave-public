@@ -24,12 +24,9 @@ class ProfileCreate(ProfileBase):
 
 
 class ProfileUpdate(BaseModel):
-    # В обновлении все поля опциональны, чтобы можно было менять только одно
     username: Optional[str] = None
+    avatar_url: Optional[str] = None
     bio: Optional[str] = None
-    avatar_url: Optional[str] = None  # Можно оставить строкой для путей к S3
-    is_producer: Optional[bool] = None
-    social_links: Optional[Dict[str, str]] = None
 
 
 class ProfileRead(ProfileBase):

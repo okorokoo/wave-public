@@ -22,6 +22,16 @@ class Settings(BaseSettings):
     SECRET_KEY: str = Field(..., description="Ключ для подписи JWT токенов")
     ALGORITHM: str = "HS256"
 
+    # Настройки брокера
+    RABBITMQ_PORT: int
+    RABBITMQ_PORT_ADMIN: int
+    RABBITMQ_LOGIN: str
+    RABBITMQ_PASSWORD: str
+
+    @property
+    def rabbitmq_url(self) -> str:
+        return f"amqp://{self.RABBITMQ_LOGIN}:{self.RABBITMQ_PASSWORD}@rabbitmq:{self.RABBITMQ_PORT}/"
+
     # Конфигурация загрузки из .env
     model_config = SettingsConfigDict(
         env_file=os.path.join(BASE_DIR, ".env"),
