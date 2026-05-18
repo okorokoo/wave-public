@@ -21,6 +21,7 @@ services:
       - .env
     depends_on:
       - auth-db
+      - rabbitmq
     ports:
       - "8000:8000"
 
@@ -45,5 +46,20 @@ services:
       - .env
     depends_on:
       - user-db
+      - rabbitmq
     ports:
       - "8001:8000"
+
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "${RABBITMQ_PORT}:${RABBITMQ_PORT}"   # Порт для протокола AMQP
+      - "${RABBITMQ_PORT_ADMIN}:${RABBITMQ_PORT_ADMIN}" # Порт для веб-интерфейса управления (логин/пароль: guest/guest)
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file:
+      - .env
