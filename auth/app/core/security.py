@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from common.config import settings
+from config import settings
 from jose import jwt
 
 

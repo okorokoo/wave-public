@@ -24,6 +24,16 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     REFRESH_TOKEN_EXPIRE_DAYS: int
 
+    # Настройки брокера
+    RABBITMQ_PORT: int
+    RABBITMQ_PORT_ADMIN: int
+    RABBITMQ_LOGIN: str
+    RABBITMQ_PASSWORD: str
+
+    @property
+    def rabbitmq_url(self) -> str:
+        return f"amqp://{self.RABBITMQ_LOGIN}:{self.RABBITMQ_PASSWORD}@rabbitmq:{self.RABBITMQ_PORT}/"
+
     # Конфигурация загрузки из .env
     model_config = SettingsConfigDict(
         env_file=os.path.join(BASE_DIR, ".env"),

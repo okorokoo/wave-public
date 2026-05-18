@@ -1,6 +1,5 @@
 from datetime import datetime, timezone, timedelta
 
-from common.config import settings
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from jose import jwt, JWTError
@@ -8,11 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
+from app.core.database import get_db
+from app.core.events import publish_user_created
 from app.core.security import hash_password, create_refresh_token
 from app.core.security import verify_password, create_access_token
 from app.models import User, RefreshToken
-from app.schemas import UserAuthRead, UserRegister, RefreshRequest
-from common.database import get_db
+from schemas.schemas import UserAuthRead, UserRegister, RefreshRequest
+from config import settings
 
 router = APIRouter(prefix="/v1")
 
@@ -81,6 +82,12 @@ async def register_user(
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail="Ошибка при сохранении в базу")
+
+    try:
+        await publish_user_created(user_id=str(new_user.id))  # публикуем в брокер
+    except Exception as rb_exc:
+        print(f"RabbitMQ error: {rb_exc}")
+        raise HTTPException(status_code=500, detail=f"Ошибка брокера: {str(rb_exc)}")
 
     return new_user
 
