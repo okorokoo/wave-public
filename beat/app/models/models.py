@@ -1,0 +1,34 @@
+import uuid
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import declarative_base
+
+Base = declarative_base()
+
+
+class Beat(Base):
+    __tablename__ = "beats"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String, nullable=False)
+    bpm = Column(Integer, nullable=True)
+    key = Column(String, nullable=False)
+    price = Column(Numeric(10, 2), nullable=False)
+    genre = Column(String, nullable=True)
+    primary_instrument = Column(String, nullable=True)
+
+    audio_preview_url = Column(String, nullable=False)
+    audio_full_url = Column(String, nullable=False)
+
+    author_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    is_processed = Column(Boolean, nullable=False, default=False)
+
+
+class Purchase(Base):
+    __tablename__ = "purchases"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    beat_id = Column(UUID(as_uuid=True), ForeignKey("beats.id", ondelete="CASCADE"), nullable=False, index=True)
+    buyer_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    license_type = Column(String, nullable=False, default="basic")
+    purchased_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

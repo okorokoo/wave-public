@@ -1,0 +1,99 @@
+import uuid
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, Query, status, UploadFile, File
+
+from app.core.database import get_db
+from app.core.security import get_current_user_id
+from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, PurchaseResponse, DownloadResponse
+from app.services.beat import BeatService, PurchaseService
+
+router = APIRouter(prefix="/beats", tags=["Beats Catalog"])
+
+
+@router.post("/", response_model=BeatResponse, status_code=status.HTTP_201_CREATED)
+async def upload_new_beat(
+        beat_in: BeatForm = Depends(),
+        audio_full: UploadFile = File(..., description="Полная качественная версия для покупателя (WAV)"),
+        author_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    """
+    Загрузка нового бита вместе с аудиофайлами.
+    Файлы загружаются в локальный MinIO, а ссылки сохраняются в Postgres.
+    """
+    service = BeatService(db)
+    return await service.upload_beat(
+        beat_form=beat_in,
+        audio_full=audio_full,
+        author_id=author_id
+    )
+
+
+@router.patch("/{beat_id}", response_model=BeatResponse)
+async def update_beat(
+        beat_id: uuid.UUID,
+        update_data: BeatUpdate,
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    """
+    Частичное обновление данных бита (BPM, цена, жанр и т.д.).
+    Доступно только автору бита.
+    """
+    service = BeatService(db)
+    return await service.update_beat(
+        beat_id=beat_id,
+        current_user_id=current_user_id,
+        update_in=update_data
+    )
+
+
+@router.get("/", response_model=List[BeatResponse])
+async def get_beats_catalog(
+        search: Optional[str] = Query(None, description="Поиск по названию"),
+        genre: Optional[str] = Query(None, description="Фильтр по жанру"),
+        instrument: Optional[str] = Query(None, description="Фильтр по главному инструменту"),
+        min_bpm: Optional[int] = Query(None, ge=40, le=300, description="Минимальный темп"),
+        max_bpm: Optional[int] = Query(None, ge=40, le=300, description="Максимальный темп"),
+        db=Depends(get_db)
+):
+    service = BeatService(db)
+    return await service.get_catalog(
+        search=search,
+        genre=genre,
+        instrument=instrument,
+        min_bpm=min_bpm,
+        max_bpm=max_bpm
+    )
+
+
+@router.delete("/{beat_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_beat(
+        beat_id: uuid.UUID,
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = BeatService(db)
+    await service.remove_beat(beat_id, current_user_id)
+    return None
+
+
+@router.post("/{beat_id}/purchase", response_model=PurchaseResponse, status_code=status.HTTP_201_CREATED)
+async def purchase_beat(
+        beat_id: uuid.UUID,
+        buyer_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = PurchaseService(db)
+    return await service.purchase_beat(beat_id, buyer_id)
+
+
+@router.get("/{beat_id}/download", response_model=DownloadResponse)
+async def download_beat(
+        beat_id: uuid.UUID,
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = PurchaseService(db)
+    return await service.get_download_url(beat_id, current_user_id)

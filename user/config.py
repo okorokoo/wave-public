@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     def database_url(self) -> str:
         return f"postgresql+asyncpg://{self.USER}:{self.PASSWORD}@{self.USER_DB_HOST}:{self.DB_PORT_INSIDE}/{self.USER_DB_NAME}"
 
+    DEBUG: bool = False
+
     # Секреты приложения
     SECRET_KEY: str = Field(..., description="Ключ для подписи JWT токенов")
     ALGORITHM: str = "HS256"

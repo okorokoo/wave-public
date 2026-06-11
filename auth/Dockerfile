@@ -31,6 +31,7 @@ RUN poetry config virtualenvs.create false \
 
 # 6. Копируем остальной код сервиса
 COPY auth/app/ /auth/app/
+COPY auth/schemas/ /auth/schemas/
 COPY auth/config.py /auth/config.py
 
 COPY auth/alembic.ini /auth/alembic.ini

@@ -14,7 +14,16 @@ async def lifespan(app: FastAPI):
     await rabbit_client.connection.close()
 
 
-app = FastAPI(description="Wave Auth Service", lifespan=lifespan)
+_docs = "/docs" if settings.DEBUG else None
+
+app = FastAPI(
+    description="Wave Auth Service",
+    lifespan=lifespan,
+    root_path="/auth",
+    docs_url=_docs,
+    redoc_url=_docs and "/redoc",
+    openapi_url=_docs and "/openapi.json",
+)
 
 app.include_router(router_v1)
 

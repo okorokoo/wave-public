@@ -34,6 +34,15 @@ class Settings(BaseSettings):
     def rabbitmq_url(self) -> str:
         return f"amqp://{self.RABBITMQ_LOGIN}:{self.RABBITMQ_PASSWORD}@rabbitmq:{self.RABBITMQ_PORT}/"
 
+    DEBUG: bool = False
+
+    # Настройки email
+    SMTP_HOST: str = "mailhog"
+    SMTP_PORT: int = 1025
+    EMAIL_FROM: str = "noreply@wave.local"
+    BASE_URL: str = "http://localhost:8000"
+    EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
+
     # Конфигурация загрузки из .env
     model_config = SettingsConfigDict(
         env_file=os.path.join(BASE_DIR, ".env"),

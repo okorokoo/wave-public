@@ -10,26 +10,31 @@ from config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. Инициализация брокера
     broker = RabbitBroker(settings.rabbitmq_url)
     await broker.connect()
     app.state.broker = broker
 
-    # 2. Запуск консьюмеров
     queue = await broker.declare_queue("user_created")
-    # Стартуем прослушивание (не блокирует поток)
     consumer_tag = await queue.consume(handle_user_created)
 
     print(" [!] RabbitMQ consumers started")
 
-    yield  # Приложение работает
+    yield
 
-    # 3. Грациозная остановка
     await queue.cancel(consumer_tag)
     await broker.close()
 
 
-app = FastAPI(description="Wave User Service", lifespan=lifespan)
+_docs = "/docs" if settings.DEBUG else None
+
+app = FastAPI(
+    description="Wave User Service",
+    lifespan=lifespan,
+    root_path="/users",
+    docs_url=_docs,
+    redoc_url=_docs and "/redoc",
+    openapi_url=_docs and "/openapi.json",
+)
 
 app.include_router(router_v1)
 
