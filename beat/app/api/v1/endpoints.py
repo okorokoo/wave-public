@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, status, UploadFile, File
 
 from app.core.database import get_db
 from app.core.security import get_current_user_id
-from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, PurchaseResponse, DownloadResponse
+from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse
 from app.services.beat import BeatService, PurchaseService
 
 router = APIRouter(prefix="/beats", tags=["Beats Catalog"])
@@ -30,6 +30,15 @@ async def upload_new_beat(
     )
 
 
+@router.get("/my-purchases", response_model=List[MyPurchaseResponse])
+async def get_my_purchases(
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = PurchaseService(db)
+    return await service.get_my_purchases(current_user_id)
+
+
 @router.patch("/{beat_id}", response_model=BeatResponse)
 async def update_beat(
         beat_id: uuid.UUID,
@@ -49,13 +58,15 @@ async def update_beat(
     )
 
 
-@router.get("/", response_model=List[BeatResponse])
+@router.get("/", response_model=PaginatedBeatsResponse)
 async def get_beats_catalog(
         search: Optional[str] = Query(None, description="Поиск по названию"),
         genre: Optional[str] = Query(None, description="Фильтр по жанру"),
         instrument: Optional[str] = Query(None, description="Фильтр по главному инструменту"),
         min_bpm: Optional[int] = Query(None, ge=40, le=300, description="Минимальный темп"),
         max_bpm: Optional[int] = Query(None, ge=40, le=300, description="Максимальный темп"),
+        limit: int = Query(20, ge=1, le=100, description="Количество битов на странице"),
+        offset: int = Query(0, ge=0, description="Смещение"),
         db=Depends(get_db)
 ):
     service = BeatService(db)
@@ -64,7 +75,9 @@ async def get_beats_catalog(
         genre=genre,
         instrument=instrument,
         min_bpm=min_bpm,
-        max_bpm=max_bpm
+        max_bpm=max_bpm,
+        limit=limit,
+        offset=offset,
     )
 
 

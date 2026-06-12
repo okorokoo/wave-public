@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from typing import Optional, List
 
@@ -7,7 +8,7 @@ from app.core.broker import RabbitBroker
 from app.core.repo import BeatRepo, PurchaseRepo
 from app.core.s3 import S3Storage
 from app.models.models import Beat
-from app.schemas.beat import BeatUpdate, BeatForm, BeatResponse, PurchaseResponse, DownloadResponse
+from app.schemas.beat import BeatUpdate, BeatForm, BeatResponse, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse
 from config import settings
 
 PREVIEW_PROCESSING = "processing"
@@ -104,16 +105,16 @@ class BeatService:
             genre: Optional[str] = None,
             instrument: Optional[str] = None,
             min_bpm: Optional[int] = None,
-            max_bpm: Optional[int] = None
-    ) -> List[BeatResponse]:
-        beats = await self.repo.list_beats(
-            search=search,
-            genre=genre,
-            instrument=instrument,
-            min_bpm=min_bpm,
-            max_bpm=max_bpm,
+            max_bpm: Optional[int] = None,
+            limit: int = 20,
+            offset: int = 0,
+    ) -> PaginatedBeatsResponse:
+        total, beats = await asyncio.gather(
+            self.repo.count_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm),
+            self.repo.list_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm, limit=limit, offset=offset),
         )
-        return [await self._to_response(b) for b in beats]
+        items = [await self._to_response(b) for b in beats]
+        return PaginatedBeatsResponse(items=items, total=total, limit=limit, offset=offset)
 
     async def remove_beat(self, beat_id: uuid.UUID, current_user_id: uuid.UUID) -> None:
         beat = await self.repo.get_by_id(beat_id)
@@ -168,3 +169,32 @@ class PurchaseService:
 
         download_url = await self.s3.generate_presigned_url(beat.audio_full_url, expires_in=3600)
         return DownloadResponse(download_url=download_url)
+
+    async def get_my_purchases(self, buyer_id: uuid.UUID) -> List[MyPurchaseResponse]:
+        rows = await self.purchase_repo.get_by_buyer(buyer_id)
+        result = []
+        for purchase, beat in rows:
+            if beat.audio_preview_url == PREVIEW_PROCESSING:
+                preview_url = PREVIEW_PROCESSING
+            else:
+                preview_url = await self.s3.generate_presigned_url(beat.audio_preview_url)
+            beat_response = BeatResponse(
+                id=beat.id,
+                title=beat.title,
+                bpm=beat.bpm,
+                key=beat.key,
+                price=beat.price,
+                genre=beat.genre,
+                primary_instrument=beat.primary_instrument,
+                audio_preview_url=preview_url,
+                author_id=beat.author_id,
+            )
+            download_url = await self.s3.generate_presigned_url(beat.audio_full_url, expires_in=3600)
+            result.append(MyPurchaseResponse(
+                id=purchase.id,
+                license_type=purchase.license_type,
+                purchased_at=purchase.purchased_at,
+                download_url=download_url,
+                beat=beat_response,
+            ))
+        return result

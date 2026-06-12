@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import Form
 from pydantic import BaseModel, Field
@@ -51,6 +51,21 @@ class PurchaseResponse(BaseModel):
 
 class DownloadResponse(BaseModel):
     download_url: str
+
+
+class MyPurchaseResponse(BaseModel):
+    id: uuid.UUID
+    license_type: str
+    purchased_at: datetime
+    download_url: str
+    beat: BeatResponse
+
+
+class PaginatedBeatsResponse(BaseModel):
+    items: List[BeatResponse]
+    total: int
+    limit: int
+    offset: int
 
 
 class BeatForm:

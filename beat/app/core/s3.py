@@ -46,11 +46,19 @@ class S3Storage:
             )
         return s3_path
 
+    def _normalize_key(self, url_or_key: str) -> str:
+        """Вырезает prefix URL если в БД хранится полный URL вместо ключа."""
+        prefix = f"{self.endpoint_url}/{self.bucket_name}/"
+        if url_or_key.startswith(prefix):
+            return url_or_key[len(prefix):]
+        return url_or_key
+
     async def generate_presigned_url(self, s3_key: str, expires_in: int = 3600) -> str:
         """Генерирует временную ссылку на объект в S3 (по умолчанию — 1 час)."""
+        key = self._normalize_key(s3_key)
         async with self._get_client() as client:
             return await client.generate_presigned_url(
                 "get_object",
-                Params={"Bucket": self.bucket_name, "Key": s3_key},
+                Params={"Bucket": self.bucket_name, "Key": key},
                 ExpiresIn=expires_in,
             )

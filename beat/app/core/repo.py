@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional, Sequence
 
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import Beat, Purchase
@@ -35,17 +35,15 @@ class BeatRepo:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
-    async def list_beats(
+    def _build_filters(
             self,
-            search: Optional[str] = None,
-            genre: Optional[str] = None,
-            instrument: Optional[str] = None,
-            min_bpm: Optional[int] = None,
-            max_bpm: Optional[int] = None
-    ) -> Sequence[Beat]:
-        query = select(Beat)
+            search: Optional[str],
+            genre: Optional[str],
+            instrument: Optional[str],
+            min_bpm: Optional[int],
+            max_bpm: Optional[int],
+    ) -> list:
         filters = []
-
         if search:
             filters.append(Beat.title.ilike(f"%{search}%"))
         if genre:
@@ -56,12 +54,38 @@ class BeatRepo:
             filters.append(Beat.bpm >= min_bpm)
         if max_bpm:
             filters.append(Beat.bpm <= max_bpm)
+        return filters
 
+    async def count_beats(
+            self,
+            search: Optional[str] = None,
+            genre: Optional[str] = None,
+            instrument: Optional[str] = None,
+            min_bpm: Optional[int] = None,
+            max_bpm: Optional[int] = None,
+    ) -> int:
+        filters = self._build_filters(search, genre, instrument, min_bpm, max_bpm)
+        query = select(func.count()).select_from(Beat)
         if filters:
             query = query.where(and_(*filters))
+        result = await self.db.execute(query)
+        return result.scalar_one()
 
-        query = query.order_by(Beat.id.desc())
-
+    async def list_beats(
+            self,
+            search: Optional[str] = None,
+            genre: Optional[str] = None,
+            instrument: Optional[str] = None,
+            min_bpm: Optional[int] = None,
+            max_bpm: Optional[int] = None,
+            limit: int = 20,
+            offset: int = 0,
+    ) -> Sequence[Beat]:
+        filters = self._build_filters(search, genre, instrument, min_bpm, max_bpm)
+        query = select(Beat)
+        if filters:
+            query = query.where(and_(*filters))
+        query = query.order_by(Beat.id.desc()).limit(limit).offset(offset)
         result = await self.db.execute(query)
         return result.scalars().all()
 
@@ -88,3 +112,13 @@ class PurchaseRepo:
         )
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
+
+    async def get_by_buyer(self, buyer_id: uuid.UUID):
+        query = (
+            select(Purchase, Beat)
+            .join(Beat, Purchase.beat_id == Beat.id)
+            .where(Purchase.buyer_id == buyer_id)
+            .order_by(Purchase.purchased_at.desc())
+        )
+        result = await self.db.execute(query)
+        return result.all()
