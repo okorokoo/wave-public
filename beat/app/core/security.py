@@ -15,7 +15,7 @@ class TokenData(BaseModel):
 async def get_current_user_id(auth: HTTPAuthorizationCredentials = Depends(security)) -> uuid.UUID:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Не удалось валидировать токен",
+        detail="Не удалось валидировать учетные данные",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
