@@ -18,11 +18,6 @@ class ProfileBase(BaseModel):
         return str(v)
 
 
-class ProfileCreate(ProfileBase):
-    user_id: UUID
-    username: str  # При создании никнейм обязателен
-
-
 class ProfileUpdate(BaseModel):
     username: Optional[str] = None
     avatar_url: Optional[str] = None

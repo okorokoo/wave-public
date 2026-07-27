@@ -10,11 +10,10 @@ from starlette import status
 
 from app.core.database import get_db
 from app.core.email import send_verification_email
-from app.core.events import publish_user_created
 from app.core.security import hash_password, create_refresh_token
 from app.core.security import verify_password, create_access_token
-from app.models.models import User, RefreshToken, EmailVerification
-from schemas.schemas import UserAuthRead, UserRegister, RefreshRequest
+from app.models.models import User, RefreshToken, EmailVerification, OutboxEvent
+from schemas.schemas import UserAuthRead, UserRegister, RefreshRequest, ResendVerificationRequest
 from config import settings
 
 router = APIRouter(prefix="/v1")
@@ -68,29 +67,29 @@ async def register_user(
         hashed_password=hash_password(user_in.password)
     )
 
+    verification_token = str(uuid.uuid4())
+
     db.add(new_user)
     try:
+        await db.flush()
+
+        verification = EmailVerification(
+            token=verification_token,
+            user_id=new_user.id,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS),
+        )
+        outbox_event = OutboxEvent(
+            event_type="user_created",
+            routing_key="user_created",
+            payload={"user_id": str(new_user.id)},
+        )
+        db.add(verification)
+        db.add(outbox_event)
         await db.commit()
         await db.refresh(new_user)
     except Exception:
         await db.rollback()
         raise HTTPException(status_code=500, detail="Ошибка при сохранении в базу")
-
-    try:
-        await publish_user_created(user_id=str(new_user.id))
-    except Exception as rb_exc:
-        print(f"RabbitMQ error: {rb_exc}")
-        raise HTTPException(status_code=500, detail=f"Ошибка брокера: {str(rb_exc)}")
-
-    # Создаём токен верификации и отправляем письмо
-    verification_token = str(uuid.uuid4())
-    verification = EmailVerification(
-        token=verification_token,
-        user_id=new_user.id,
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS)
-    )
-    db.add(verification)
-    await db.commit()
 
     try:
         await send_verification_email(new_user.email, verification_token)
@@ -114,6 +113,18 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный email или пароль",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Аккаунт деактивирован",
+        )
+
+    if not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Подтвердите email перед входом",
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})
@@ -150,6 +161,12 @@ async def refresh_token_endpoint(data: RefreshRequest, db: AsyncSession = Depend
 
     if not db_token or db_token.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         raise HTTPException(status_code=401, detail="Refresh токен недействителен")
+
+    user = await db.get(User, db_token.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Аккаунт недоступен")
+    if not user.is_verified:
+        raise HTTPException(status_code=403, detail="Подтвердите email перед входом")
 
     await db.delete(db_token)
 
@@ -215,31 +232,38 @@ async def verify_email(
 
 @router.post("/resend-verification", status_code=status.HTTP_200_OK)
 async def resend_verification(
-        current_user: User = Depends(get_current_user),
+        data: ResendVerificationRequest,
         db: AsyncSession = Depends(get_db)
 ):
-    if current_user.is_verified:
-        raise HTTPException(status_code=400, detail="Email уже подтверждён")
+    generic_response = {"message": "Если аккаунт существует и не подтверждён, письмо отправлено"}
 
-    # Аннулируем все активные токены пользователя
+    query = select(User).where(User.email == data.email)
+    result = await db.execute(query)
+    user = result.scalar_one_or_none()
+
+    if not user or user.is_verified:
+        return generic_response
+
     query = select(EmailVerification).where(
-        EmailVerification.user_id == current_user.id,
+        EmailVerification.user_id == user.id,
         EmailVerification.used_at == None  # noqa: E711
     )
     result = await db.execute(query)
     for old_token in result.scalars().all():
         old_token.used_at = datetime.now(timezone.utc)
 
-    # Создаём новый токен
     verification_token = str(uuid.uuid4())
     verification = EmailVerification(
         token=verification_token,
-        user_id=current_user.id,
+        user_id=user.id,
         expires_at=datetime.now(timezone.utc) + timedelta(hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS)
     )
     db.add(verification)
     await db.commit()
 
-    await send_verification_email(current_user.email, verification_token)
+    try:
+        await send_verification_email(user.email, verification_token)
+    except Exception as e:
+        print(f"Email error: {e}")
 
-    return {"message": "Письмо отправлено повторно"}
+    return generic_response

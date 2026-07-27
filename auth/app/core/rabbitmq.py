@@ -19,8 +19,11 @@ class RabbitClient:
             raise RuntimeError("RabbitMQ connection not established")
 
         await self.channel.default_exchange.publish(
-            aio_pika.Message(body=json.dumps(body).encode()),
-            routing_key=routing_key
+            aio_pika.Message(
+                body=json.dumps(body).encode(),
+                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+            ),
+            routing_key=routing_key,
         )
 
 

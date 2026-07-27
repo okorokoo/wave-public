@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
+from sqlalchemy import text
 
 from app.api.v1.endpoints import router as router_v1
+from app.core.database import async_session
 from app.core.s3 import S3Storage
 from config import settings
 
@@ -32,3 +34,26 @@ app.include_router(router_v1)
 @app.get("/")
 async def read_root():
     return {"message": "Beat Service Working Here!"}
+
+
+@app.get("/health")
+async def health(response: Response):
+    checks: dict[str, str] = {}
+
+    try:
+        async with async_session() as session:
+            await session.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as exc:
+        checks["database"] = f"error: {exc}"
+
+    try:
+        await s3_storage.check_connection()
+        checks["s3"] = "ok"
+    except Exception as exc:
+        checks["s3"] = f"error: {exc}"
+
+    if not all(value == "ok" for value in checks.values()):
+        response.status_code = 503
+
+    return {"status": "ok" if response.status_code == 200 else "degraded", "checks": checks}

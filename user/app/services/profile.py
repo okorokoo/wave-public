@@ -14,12 +14,7 @@ class ProfileService:
         self._profile_repo = ProfileRepo(db=db)
 
     async def create_empty_profile(self, user_id: uuid.UUID) -> Profile:
-        try:
-            new_profile = await self._profile_repo.create_profile(user_id=user_id)
-
-            return new_profile
-        except Exception as e:
-            raise e
+        return await self._profile_repo.create_profile(user_id=user_id)
 
     async def get_my_profile(self, user_id: uuid.UUID) -> Profile:
         profile = await self._profile_repo.get_by_user_id(user_id)

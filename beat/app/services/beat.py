@@ -11,6 +11,12 @@ from app.schemas.beat import BeatUpdate, BeatForm, BeatResponse, PurchaseRespons
 from config import settings
 
 PREVIEW_PROCESSING = "processing"
+ALLOWED_AUDIO_CONTENT_TYPES = {
+    "audio/wav",
+    "audio/x-wav",
+    "audio/wave",
+    "audio/vnd.wave",
+}
 
 
 class BeatService:
@@ -49,6 +55,24 @@ class BeatService:
             author_id: uuid.UUID,
             cover: Optional[UploadFile] = None,
     ) -> BeatResponse:
+        filename = audio_full.filename or ""
+        if (
+            audio_full.content_type not in ALLOWED_AUDIO_CONTENT_TYPES
+            and not filename.lower().endswith(".wav")
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Аудиофайл должен быть в формате WAV",
+            )
+
+        audio_content = await audio_full.read()
+        if len(audio_content) > settings.MAX_AUDIO_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Размер WAV-файла превышает допустимый лимит",
+            )
+        await audio_full.seek(0)
+
         beat_folder_id = uuid.uuid4()
 
         full_key = await self.s3.upload_file(
@@ -158,6 +182,13 @@ class BeatService:
                 detail="Вы не являетесь автором этого бита и не можете его удалить",
             )
 
+        keys = [beat.audio_full_url]
+        if beat.audio_preview_url and beat.audio_preview_url != PREVIEW_PROCESSING:
+            keys.append(beat.audio_preview_url)
+        if beat.cover_url:
+            keys.append(beat.cover_url)
+
+        await self.s3.delete_objects(keys)
         await self.repo.delete(beat)
 
 
@@ -179,7 +210,10 @@ class PurchaseService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Вы уже купили этот бит")
 
         purchase = await self.purchase_repo.create(beat_id, buyer_id)
-        download_url = await self.s3.generate_presigned_url(beat.audio_full_url, expires_in=3600)
+        download_url = await self.s3.generate_presigned_url(
+            beat.audio_full_url,
+            expires_in=settings.S3_DOWNLOAD_URL_EXPIRE_SECONDS,
+        )
 
         return PurchaseResponse(
             id=purchase.id,
@@ -198,7 +232,10 @@ class PurchaseService:
         if not await self.purchase_repo.get_by_beat_and_buyer(beat_id, buyer_id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Вы не купили этот бит")
 
-        download_url = await self.s3.generate_presigned_url(beat.audio_full_url, expires_in=3600)
+        download_url = await self.s3.generate_presigned_url(
+            beat.audio_full_url,
+            expires_in=settings.S3_DOWNLOAD_URL_EXPIRE_SECONDS,
+        )
         return DownloadResponse(download_url=download_url)
 
     async def get_my_purchases(self, buyer_id: uuid.UUID) -> List[MyPurchaseResponse]:
@@ -222,7 +259,10 @@ class PurchaseService:
                 tags=[bt.tag for bt in beat.tags],
                 author_id=beat.author_id,
             )
-            download_url = await self.s3.generate_presigned_url(beat.audio_full_url, expires_in=3600)
+            download_url = await self.s3.generate_presigned_url(
+                beat.audio_full_url,
+                expires_in=settings.S3_DOWNLOAD_URL_EXPIRE_SECONDS,
+            )
             result.append(MyPurchaseResponse(
                 id=purchase.id,
                 license_type=purchase.license_type,

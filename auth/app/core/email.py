@@ -7,7 +7,7 @@ from config import settings
 
 
 async def send_verification_email(to_email: str, token: str) -> None:
-    link = f"{settings.BASE_URL}/v1/verify-email?token={token}"
+    link = f"{settings.BASE_URL}/auth/v1/verify-email?token={token}"
 
     message = MIMEMultipart("alternative")
     message["Subject"] = "Подтверждение email — Wave"

@@ -2,21 +2,19 @@ import aioboto3
 from contextlib import asynccontextmanager
 from fastapi import UploadFile
 
+from config import settings
+
 
 class S3Storage:
     def __init__(self):
-        # Настройки для локального MinIO
-        self.endpoint_url = "http://minio:9000"
-        self.access_key = "minioadmin"
-        self.secret_key = "minioadminpassword"
-        self.bucket_name = "wave-beats"
-
-        # Создаем сессию aioboto3
+        self.endpoint_url = settings.S3_ENDPOINT_URL
+        self.access_key = settings.S3_ACCESS_KEY
+        self.secret_key = settings.S3_SECRET_KEY
+        self.bucket_name = settings.S3_BUCKET_NAME
         self.session = aioboto3.Session()
 
     @asynccontextmanager
     async def _get_client(self):
-        """Контекстный менеджер для безопасного открытия/закрытия сессии"""
         async with self.session.client(
                 "s3",
                 endpoint_url=self.endpoint_url,
@@ -26,7 +24,6 @@ class S3Storage:
             yield client
 
     async def create_bucket_if_not_exists(self):
-        """Создает бакет при старте приложения, если его нет"""
         async with self._get_client() as client:
             try:
                 await client.head_bucket(Bucket=self.bucket_name)
@@ -34,8 +31,11 @@ class S3Storage:
                 await client.create_bucket(Bucket=self.bucket_name)
                 print(f"Bucket '{self.bucket_name}' successfully created!")
 
+    async def check_connection(self) -> None:
+        async with self._get_client() as client:
+            await client.head_bucket(Bucket=self.bucket_name)
+
     async def upload_file(self, file: UploadFile, s3_path: str) -> str:
-        """Загружает файл в S3, возвращает S3-ключ (путь внутри бакета)."""
         async with self._get_client() as client:
             file_content = await file.read()
             await client.put_object(
@@ -47,18 +47,32 @@ class S3Storage:
         return s3_path
 
     def _normalize_key(self, url_or_key: str) -> str:
-        """Вырезает prefix URL если в БД хранится полный URL вместо ключа."""
         prefix = f"{self.endpoint_url}/{self.bucket_name}/"
         if url_or_key.startswith(prefix):
             return url_or_key[len(prefix):]
         return url_or_key
 
-    async def generate_presigned_url(self, s3_key: str, expires_in: int = 3600) -> str:
-        """Генерирует временную ссылку на объект в S3 (по умолчанию — 1 час)."""
+    async def generate_presigned_url(self, s3_key: str, expires_in: int | None = None) -> str:
         key = self._normalize_key(s3_key)
+        ttl = expires_in or settings.S3_PRESIGNED_URL_EXPIRE_SECONDS
         async with self._get_client() as client:
             return await client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": self.bucket_name, "Key": key},
-                ExpiresIn=expires_in,
+                ExpiresIn=ttl,
+            )
+
+    async def delete_objects(self, keys: list[str]) -> None:
+        normalized_keys = [
+            self._normalize_key(key)
+            for key in keys
+            if key
+        ]
+        if not normalized_keys:
+            return
+
+        async with self._get_client() as client:
+            await client.delete_objects(
+                Bucket=self.bucket_name,
+                Delete={"Objects": [{"Key": key} for key in normalized_keys]},
             )
