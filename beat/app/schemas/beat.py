@@ -23,6 +23,7 @@ class BeatUpdate(BaseModel):
     price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
     genre: Optional[str] = Field(None, min_length=1, max_length=100)
     primary_instrument: Optional[str] = Field(None, min_length=1, max_length=100)
+    tags: Optional[List[str]] = None
 
 
 class BeatResponse(BaseModel):
@@ -34,6 +35,8 @@ class BeatResponse(BaseModel):
     genre: Optional[str]
     primary_instrument: Optional[str]
     audio_preview_url: str
+    cover_url: Optional[str] = None
+    tags: List[str] = []
     author_id: uuid.UUID
 
     class Config:
@@ -68,6 +71,17 @@ class PaginatedBeatsResponse(BaseModel):
     offset: int
 
 
+class MyBeatResponse(BeatResponse):
+    sales_count: int
+
+
+class PaginatedMyBeatsResponse(BaseModel):
+    items: List[MyBeatResponse]
+    total: int
+    limit: int
+    offset: int
+
+
 class BeatForm:
     def __init__(
         self,
@@ -76,7 +90,8 @@ class BeatForm:
         key: Optional[str] = Form(None, max_length=10),
         price: Decimal = Form(..., ge=0),
         genre: Optional[str] = Form(None),
-        primary_instrument: Optional[str] = Form(None)
+        primary_instrument: Optional[str] = Form(None),
+        tags: List[str] = Form(default=[]),
     ):
         self.title = title
         self.bpm = bpm
@@ -84,3 +99,4 @@ class BeatForm:
         self.price = price
         self.genre = genre
         self.primary_instrument = primary_instrument
+        self.tags = tags

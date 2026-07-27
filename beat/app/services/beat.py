@@ -1,4 +1,3 @@
-import asyncio
 import uuid
 from typing import Optional, List
 
@@ -8,7 +7,7 @@ from app.core.broker import RabbitBroker
 from app.core.repo import BeatRepo, PurchaseRepo
 from app.core.s3 import S3Storage
 from app.models.models import Beat
-from app.schemas.beat import BeatUpdate, BeatForm, BeatResponse, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse
+from app.schemas.beat import BeatUpdate, BeatForm, BeatResponse, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, MyBeatResponse, PaginatedMyBeatsResponse
 from config import settings
 
 PREVIEW_PROCESSING = "processing"
@@ -21,11 +20,13 @@ class BeatService:
         self.rmq = RabbitBroker(url=settings.rabbitmq_url)
 
     async def _to_response(self, beat: Beat) -> BeatResponse:
-        """Конвертирует ORM-объект в схему, подменяя S3-ключ превью на presigned URL."""
+        """Конвертирует ORM-объект в схему, подменяя S3-ключи на presigned URL."""
         if beat.audio_preview_url == PREVIEW_PROCESSING:
             preview_url = PREVIEW_PROCESSING
         else:
             preview_url = await self.s3.generate_presigned_url(beat.audio_preview_url)
+
+        cover_url = await self.s3.generate_presigned_url(beat.cover_url) if beat.cover_url else None
 
         return BeatResponse(
             id=beat.id,
@@ -36,6 +37,8 @@ class BeatService:
             genre=beat.genre,
             primary_instrument=beat.primary_instrument,
             audio_preview_url=preview_url,
+            cover_url=cover_url,
+            tags=[bt.tag for bt in beat.tags],
             author_id=beat.author_id,
         )
 
@@ -43,13 +46,26 @@ class BeatService:
             self,
             beat_form: BeatForm,
             audio_full: UploadFile,
-            author_id: uuid.UUID
+            author_id: uuid.UUID,
+            cover: Optional[UploadFile] = None,
     ) -> BeatResponse:
         beat_folder_id = uuid.uuid4()
 
         full_key = await self.s3.upload_file(
             audio_full, f"beats/{beat_folder_id}/full_{audio_full.filename}"
         )
+
+        cover_key = None
+        if cover:
+            allowed = {"image/jpeg", "image/png", "image/webp"}
+            if cover.content_type not in allowed:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Обложка должна быть в формате JPEG, PNG или WebP",
+                )
+            cover_key = await self.s3.upload_file(
+                cover, f"beats/{beat_folder_id}/cover_{cover.filename}"
+            )
 
         beat_data = {
             "title": beat_form.title,
@@ -61,6 +77,8 @@ class BeatService:
             "author_id": author_id,
             "audio_preview_url": PREVIEW_PROCESSING,
             "audio_full_url": full_key,
+            "cover_url": cover_key,
+            "tags": beat_form.tags,
         }
 
         new_beat = await self.repo.create(beat_data)
@@ -106,15 +124,28 @@ class BeatService:
             instrument: Optional[str] = None,
             min_bpm: Optional[int] = None,
             max_bpm: Optional[int] = None,
+            tag: Optional[str] = None,
             limit: int = 20,
             offset: int = 0,
     ) -> PaginatedBeatsResponse:
-        total, beats = await asyncio.gather(
-            self.repo.count_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm),
-            self.repo.list_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm, limit=limit, offset=offset),
-        )
+        total = await self.repo.count_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm, tag=tag)
+        beats = await self.repo.list_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm, tag=tag, limit=limit, offset=offset)
         items = [await self._to_response(b) for b in beats]
         return PaginatedBeatsResponse(items=items, total=total, limit=limit, offset=offset)
+
+    async def get_my_beats(
+            self,
+            author_id: uuid.UUID,
+            limit: int = 20,
+            offset: int = 0,
+    ) -> PaginatedMyBeatsResponse:
+        total = await self.repo.count_by_author(author_id)
+        rows = await self.repo.list_by_author(author_id, limit=limit, offset=offset)
+        items = []
+        for beat, sales_count in rows:
+            base = await self._to_response(beat)
+            items.append(MyBeatResponse(**base.model_dump(), sales_count=sales_count))
+        return PaginatedMyBeatsResponse(items=items, total=total, limit=limit, offset=offset)
 
     async def remove_beat(self, beat_id: uuid.UUID, current_user_id: uuid.UUID) -> None:
         beat = await self.repo.get_by_id(beat_id)
@@ -187,6 +218,8 @@ class PurchaseService:
                 genre=beat.genre,
                 primary_instrument=beat.primary_instrument,
                 audio_preview_url=preview_url,
+                cover_url=await self.s3.generate_presigned_url(beat.cover_url) if beat.cover_url else None,
+                tags=[bt.tag for bt in beat.tags],
                 author_id=beat.author_id,
             )
             download_url = await self.s3.generate_presigned_url(beat.audio_full_url, expires_in=3600)

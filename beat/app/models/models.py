@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
@@ -19,9 +19,19 @@ class Beat(Base):
 
     audio_preview_url = Column(String, nullable=False)
     audio_full_url = Column(String, nullable=False)
+    cover_url = Column(String, nullable=True)
 
     author_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     is_processed = Column(Boolean, nullable=False, default=False)
+
+    tags = relationship("BeatTag", lazy="selectin", cascade="all, delete-orphan")
+
+
+class BeatTag(Base):
+    __tablename__ = "beat_tags"
+
+    beat_id = Column(UUID(as_uuid=True), ForeignKey("beats.id", ondelete="CASCADE"), primary_key=True)
+    tag = Column(String(50), primary_key=True)
 
 
 class Purchase(Base):

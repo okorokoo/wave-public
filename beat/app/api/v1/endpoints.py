@@ -5,29 +5,38 @@ from fastapi import APIRouter, Depends, Query, status, UploadFile, File
 
 from app.core.database import get_db
 from app.core.security import get_current_user_id
-from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse
+from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse
 from app.services.beat import BeatService, PurchaseService
 
-router = APIRouter(prefix="/beats", tags=["Beats Catalog"])
+router = APIRouter(tags=["Beats Catalog"])
 
 
 @router.post("/", response_model=BeatResponse, status_code=status.HTTP_201_CREATED)
 async def upload_new_beat(
         beat_in: BeatForm = Depends(),
-        audio_full: UploadFile = File(..., description="Полная качественная версия для покупателя (WAV)"),
+        audio_full: UploadFile = File(..., description="Полная версия (WAV)"),
+        cover: Optional[UploadFile] = File(None, description="Обложка бита (JPEG, PNG, WebP)"),
         author_id: uuid.UUID = Depends(get_current_user_id),
         db=Depends(get_db)
 ):
-    """
-    Загрузка нового бита вместе с аудиофайлами.
-    Файлы загружаются в локальный MinIO, а ссылки сохраняются в Postgres.
-    """
     service = BeatService(db)
     return await service.upload_beat(
         beat_form=beat_in,
         audio_full=audio_full,
-        author_id=author_id
+        cover=cover,
+        author_id=author_id,
     )
+
+
+@router.get("/my-beats", response_model=PaginatedMyBeatsResponse)
+async def get_my_beats(
+        limit: int = Query(20, ge=1, le=100, description="Количество битов на странице"),
+        offset: int = Query(0, ge=0, description="Смещение"),
+        author_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = BeatService(db)
+    return await service.get_my_beats(author_id, limit=limit, offset=offset)
 
 
 @router.get("/my-purchases", response_model=List[MyPurchaseResponse])
@@ -63,6 +72,7 @@ async def get_beats_catalog(
         search: Optional[str] = Query(None, description="Поиск по названию"),
         genre: Optional[str] = Query(None, description="Фильтр по жанру"),
         instrument: Optional[str] = Query(None, description="Фильтр по главному инструменту"),
+        tag: Optional[str] = Query(None, description="Фильтр по тегу"),
         min_bpm: Optional[int] = Query(None, ge=40, le=300, description="Минимальный темп"),
         max_bpm: Optional[int] = Query(None, ge=40, le=300, description="Максимальный темп"),
         limit: int = Query(20, ge=1, le=100, description="Количество битов на странице"),
@@ -74,6 +84,7 @@ async def get_beats_catalog(
         search=search,
         genre=genre,
         instrument=instrument,
+        tag=tag,
         min_bpm=min_bpm,
         max_bpm=max_bpm,
         limit=limit,
