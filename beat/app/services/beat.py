@@ -11,6 +11,7 @@ from app.schemas.beat import BeatUpdate, BeatForm, BeatResponse, PurchaseRespons
 from config import settings
 
 PREVIEW_PROCESSING = "processing"
+BEAT_DELETED = "deleted"
 ALLOWED_AUDIO_CONTENT_TYPES = {
     "audio/wav",
     "audio/x-wav",
@@ -30,14 +31,14 @@ MAX_VOICE_TAG_BYTES = 10 * 1024 * 1024  # 10 MB
 class BeatService:
     def __init__(self, db):
         self.repo = BeatRepo(db)
+        self.purchase_repo = PurchaseRepo(db)
         self.voice_tag_repo = UserVoiceTagRepo(db)
         self.s3 = S3Storage()
         self.rmq = RabbitBroker(url=settings.rabbitmq_url)
 
     async def _to_response(self, beat: Beat) -> BeatResponse:
-        """Конвертирует ORM-объект в схему, подменяя S3-ключи на presigned URL."""
-        if beat.audio_preview_url == PREVIEW_PROCESSING:
-            preview_url = PREVIEW_PROCESSING
+        if beat.audio_preview_url in (PREVIEW_PROCESSING, BEAT_DELETED):
+            preview_url = beat.audio_preview_url
         else:
             preview_url = await self.s3.generate_presigned_url(beat.audio_preview_url)
 
@@ -136,7 +137,7 @@ class BeatService:
             update_in: BeatUpdate
     ) -> BeatResponse:
         beat = await self.repo.get_by_id(beat_id)
-        if not beat:
+        if not beat or beat.is_deleted:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бит не найден")
 
         if beat.author_id != current_user_id:
@@ -184,7 +185,7 @@ class BeatService:
 
     async def remove_beat(self, beat_id: uuid.UUID, current_user_id: uuid.UUID) -> None:
         beat = await self.repo.get_by_id(beat_id)
-        if not beat:
+        if not beat or beat.is_deleted:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бит не найден")
 
         if beat.author_id != current_user_id:
@@ -193,14 +194,29 @@ class BeatService:
                 detail="Вы не являетесь автором этого бита и не можете его удалить",
             )
 
-        keys = [beat.audio_full_url]
-        if beat.audio_preview_url and beat.audio_preview_url != PREVIEW_PROCESSING:
-            keys.append(beat.audio_preview_url)
-        if beat.cover_url:
-            keys.append(beat.cover_url)
+        has_purchases = await self.purchase_repo.exists_for_beat(beat_id)
 
-        await self.s3.delete_objects(keys)
-        await self.repo.delete(beat)
+        if has_purchases:
+            # Покупатели существуют — мягкое удаление.
+            # WAV-файл остаётся в S3, доступ покупателей сохраняется.
+            # Превью и обложка удаляются — они больше не нужны.
+            keys_to_delete = []
+            if beat.audio_preview_url and beat.audio_preview_url not in (PREVIEW_PROCESSING, BEAT_DELETED):
+                keys_to_delete.append(beat.audio_preview_url)
+            if beat.cover_url:
+                keys_to_delete.append(beat.cover_url)
+            if keys_to_delete:
+                await self.s3.delete_objects(keys_to_delete)
+            await self.repo.soft_delete(beat)
+        else:
+            # Покупок нет — жёсткое удаление, всё чистим.
+            keys = [beat.audio_full_url]
+            if beat.audio_preview_url and beat.audio_preview_url not in (PREVIEW_PROCESSING, BEAT_DELETED):
+                keys.append(beat.audio_preview_url)
+            if beat.cover_url:
+                keys.append(beat.cover_url)
+            await self.s3.delete_objects(keys)
+            await self.repo.delete(beat)
 
 
 class VoiceTagService:
@@ -299,10 +315,11 @@ class PurchaseService:
         rows = await self.purchase_repo.get_by_buyer(buyer_id)
         result = []
         for purchase, beat in rows:
-            if beat.audio_preview_url == PREVIEW_PROCESSING:
-                preview_url = PREVIEW_PROCESSING
+            if beat.audio_preview_url in (PREVIEW_PROCESSING, BEAT_DELETED):
+                preview_url = beat.audio_preview_url
             else:
                 preview_url = await self.s3.generate_presigned_url(beat.audio_preview_url)
+
             beat_response = BeatResponse(
                 id=beat.id,
                 title=beat.title,

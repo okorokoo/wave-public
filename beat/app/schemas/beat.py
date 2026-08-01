@@ -66,6 +66,11 @@ class VoiceTagResponse(BaseModel):
     uploaded_at: datetime
 
 
+class PaymentResultResponse(BaseModel):
+    status: str  # pending | succeeded | canceled
+    download_url: Optional[str] = None
+
+
 class MyPurchaseResponse(BaseModel):
     id: uuid.UUID
     license_type: str

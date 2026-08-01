@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional, Sequence, List
 
-from sqlalchemy import select, and_, func, delete
+from sqlalchemy import select, and_, func, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import Beat, Purchase, BeatTag, Payment, UserVoiceTag
@@ -65,7 +65,7 @@ class BeatRepo:
             max_bpm: Optional[int],
             tag: Optional[str] = None,
     ) -> list:
-        filters = []
+        filters = [Beat.is_deleted == False]  # noqa: E712
         if search:
             filters.append(Beat.title.ilike(f"%{search}%"))
         if genre:
@@ -118,7 +118,9 @@ class BeatRepo:
         return result.scalars().all()
 
     async def count_by_author(self, author_id: uuid.UUID) -> int:
-        query = select(func.count()).select_from(Beat).where(Beat.author_id == author_id)
+        query = select(func.count()).select_from(Beat).where(
+            and_(Beat.author_id == author_id, Beat.is_deleted == False)  # noqa: E712
+        )
         result = await self.db.execute(query)
         return result.scalar_one()
 
@@ -126,7 +128,7 @@ class BeatRepo:
         query = (
             select(Beat, func.count(Purchase.id).label("sales_count"))
             .outerjoin(Purchase, Purchase.beat_id == Beat.id)
-            .where(Beat.author_id == author_id)
+            .where(and_(Beat.author_id == author_id, Beat.is_deleted == False))  # noqa: E712
             .group_by(Beat.id)
             .order_by(Beat.id.desc())
             .limit(limit)
@@ -135,8 +137,14 @@ class BeatRepo:
         result = await self.db.execute(query)
         return result.all()
 
+    async def soft_delete(self, beat: Beat) -> None:
+        beat.is_deleted = True
+        beat.audio_preview_url = "deleted"
+        beat.cover_url = None
+        self.db.add(beat)
+        await self.db.commit()
+
     async def delete(self, beat: Beat) -> None:
-        """Удаление бита из базы"""
         await self.db.delete(beat)
         await self.db.commit()
 
@@ -145,12 +153,17 @@ class PurchaseRepo:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create(self, beat_id: uuid.UUID, buyer_id: uuid.UUID, license_type: str = "basic") -> Purchase:
-        purchase = Purchase(beat_id=beat_id, buyer_id=buyer_id, license_type=license_type)
+    async def create(self, beat_id: uuid.UUID, buyer_id: uuid.UUID, amount=None, license_type: str = "basic") -> Purchase:
+        purchase = Purchase(beat_id=beat_id, buyer_id=buyer_id, license_type=license_type, amount=amount)
         self.db.add(purchase)
         await self.db.commit()
         await self.db.refresh(purchase)
         return purchase
+
+    async def exists_for_beat(self, beat_id: uuid.UUID) -> bool:
+        query = select(func.count()).select_from(Purchase).where(Purchase.beat_id == beat_id)
+        result = await self.db.execute(query)
+        return result.scalar_one() > 0
 
     async def get_by_beat_and_buyer(self, beat_id: uuid.UUID, buyer_id: uuid.UUID) -> Optional[Purchase]:
         query = select(Purchase).where(
@@ -197,12 +210,25 @@ class PaymentRepo:
         result = await self.db.execute(select(Payment).where(Payment.id == payment_id))
         return result.scalar_one_or_none()
 
+    async def get_pending_by_beat_and_buyer(
+        self, beat_id: uuid.UUID, buyer_id: uuid.UUID
+    ) -> Optional[Payment]:
+        result = await self.db.execute(
+            select(Payment).where(
+                and_(
+                    Payment.beat_id == beat_id,
+                    Payment.buyer_id == buyer_id,
+                    Payment.status == "pending",
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def update_status(self, payment_id: str, new_status: str) -> None:
-        record = await self.get_by_id(payment_id)
-        if record:
-            record.status = new_status
-            self.db.add(record)
-            await self.db.commit()
+        await self.db.execute(
+            update(Payment).where(Payment.id == payment_id).values(status=new_status)
+        )
+        await self.db.commit()
 
 
 class UserVoiceTagRepo:

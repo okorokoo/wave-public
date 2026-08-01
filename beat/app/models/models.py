@@ -23,6 +23,7 @@ class Beat(Base):
 
     author_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     is_processed = Column(Boolean, nullable=False, default=False)
+    is_deleted = Column(Boolean, nullable=False, default=False)
 
     tags = relationship("BeatTag", lazy="selectin", cascade="all, delete-orphan")
 
@@ -41,6 +42,7 @@ class Purchase(Base):
     beat_id = Column(UUID(as_uuid=True), ForeignKey("beats.id", ondelete="CASCADE"), nullable=False, index=True)
     buyer_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     license_type = Column(String, nullable=False, default="basic")
+    amount = Column(Numeric(10, 2), nullable=True)
     purchased_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 

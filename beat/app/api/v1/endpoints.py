@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, Request, status, UploadFile, File
 
 from app.core.database import get_db
 from app.core.security import get_current_user_id
-from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse
+from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse
 from app.services.beat import BeatService, PurchaseService, VoiceTagService
 from app.services.payment import PaymentService
 
@@ -105,6 +105,16 @@ async def delete_voice_tag(
     return None
 
 
+@router.get("/payment/{payment_id}/result", response_model=PaymentResultResponse)
+async def get_payment_result(
+        payment_id: str,
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = PaymentService(db)
+    return await service.get_payment_result(payment_id, current_user_id)
+
+
 @router.post("/webhook/payment", status_code=status.HTTP_200_OK)
 async def yookassa_webhook(request: Request, db=Depends(get_db)):
     body = await request.json()
@@ -134,16 +144,6 @@ async def checkout_beat(
 ):
     service = PaymentService(db)
     return await service.create_checkout(beat_id, buyer_id)
-
-
-@router.post("/{beat_id}/purchase", response_model=PurchaseResponse, status_code=status.HTTP_201_CREATED)
-async def purchase_beat(
-        beat_id: uuid.UUID,
-        buyer_id: uuid.UUID = Depends(get_current_user_id),
-        db=Depends(get_db)
-):
-    service = PurchaseService(db)
-    return await service.purchase_beat(beat_id, buyer_id)
 
 
 @router.patch("/{beat_id}", response_model=BeatResponse)
