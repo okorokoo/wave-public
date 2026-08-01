@@ -22,10 +22,9 @@ QUEUE_NAME = "beat_processing_queue"
 async def process_audio(task_data: dict):
     beat_id = task_data["beat_id"]
     full_audio_url = task_data["full_audio_url"]
-    filename = task_data["filename"]
 
     # Локальные временные файлы для обработки
-    local_input = f"temp_in_{beat_id}_{filename}"
+    local_input = f"temp_in_{beat_id}"
     local_output = f"temp_out_{beat_id}.mp3"
     tag_file = "assets/voice_tag.mp3"  # Положи сюда свой аудио-тег
 
@@ -48,17 +47,28 @@ async def process_audio(task_data: dict):
             os.makedirs("assets", exist_ok=True)
             # Если тега нет, воркер просто скопирует файл (для теста)
             print(" [!] Файл тега не найден в assets/voice_tag.mp3, делаем копию без защиты")
-            cmd = f"ffmpeg -y -i {local_input} -b:a 192k {local_output}"
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-i", str(local_input),
+                "-b:a", "192k",
+                str(local_output),
+            ]
         else:
             # 3. Магия FFmpeg: наложение зацикленного вотермарка
-            cmd = (
-                f"ffmpeg -y -i {local_input} -stream_loop -1 -i {tag_file} "
-                f'-filter_complex "amix=inputs=2:duration=first:dropout_transition=2" '
-                f"-b:a 192k {local_output}"
-            )
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-i", str(local_input),
+                "-stream_loop", "-1",
+                "-i", str(tag_file),
+                "-filter_complex", "amix=inputs=2:duration=first:dropout_transition=2",
+                "-b:a", "192k",
+                str(local_output),
+            ]
 
         # Запускаем ffmpeg в подпроцессе
-        process = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if process.returncode != 0:
             raise Exception(f"FFmpeg error: {process.stderr.decode('utf-8')}")
 

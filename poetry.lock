@@ -2405,6 +2405,17 @@ h11 = ">=0.8"
 standard = ["colorama (>=0.4) ; sys_platform == \"win32\"", "httptools (>=0.6.3)", "python-dotenv (>=0.13)", "pyyaml (>=5.1)", "uvloop (>=0.15.1) ; sys_platform != \"win32\" and sys_platform != \"cygwin\" and platform_python_implementation != \"PyPy\"", "watchfiles (>=0.20)", "websockets (>=10.4)"]
 
 [[package]]
+name = "var-dump"
+version = "1.2"
+description = "var_dump for python"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "var_dump-1.2.tar.gz", hash = "sha256:9031944c174f8ce971b71a047fc56a81dfa1ce05d354fff3a16d781391d020ae"},
+]
+
+[[package]]
 name = "wrapt"
 version = "1.17.3"
 description = "Module for decorators, wrappers and monkey patching."
@@ -2641,4 +2652,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "237e4b96219e50132015eef636f0a0eac3768913aa9fc3b02f6131582b1724e8"
+content-hash = "d547be2f1224c28bd81599f054352f2e41718e6eff303f4c856c6ae2831689a9"

@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     def rabbitmq_url(self) -> str:
         return f"amqp://{self.RABBITMQ_LOGIN}:{self.RABBITMQ_PASSWORD}@rabbitmq:{self.RABBITMQ_PORT}/"
 
-    DEBUG: bool = False
+    DEBUG: bool = True
 
     # Настройки email
     SMTP_HOST: str = "mailhog"
