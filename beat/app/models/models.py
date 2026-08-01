@@ -44,6 +44,14 @@ class Purchase(Base):
     purchased_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class UserVoiceTag(Base):
+    __tablename__ = "user_voice_tags"
+
+    user_id = Column(UUID(as_uuid=True), primary_key=True)
+    s3_key = Column(String, nullable=False)
+    uploaded_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class Payment(Base):
     __tablename__ = "payments"
 

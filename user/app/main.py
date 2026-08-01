@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
@@ -6,8 +7,12 @@ from sqlalchemy import text
 from app.api.v1.endpoints import router as router_v1
 from app.core.broker import RabbitBroker
 from app.core.database import async_session
+from app.core.logger import setup_logging
 from app.events.handlers import handle_user_created
 from config import settings
+
+setup_logging(debug=settings.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -19,7 +24,7 @@ async def lifespan(app: FastAPI):
     queue = await broker.declare_queue("user_created")
     consumer_tag = await queue.consume(handle_user_created)
 
-    print(" [!] RabbitMQ consumers started")
+    logger.info("RabbitMQ consumer started, listening on 'user_created'")
 
     yield
 

@@ -5,8 +5,11 @@ from sqlalchemy import text
 
 from app.api.v1.endpoints import router as router_v1
 from app.core.database import async_session
+from app.core.logger import setup_logging
 from app.core.s3 import S3Storage
 from config import settings
+
+setup_logging(debug=settings.DEBUG)
 
 s3_storage = S3Storage()
 

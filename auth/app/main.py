@@ -6,9 +6,12 @@ from sqlalchemy import text
 
 from app.api.v1.endpoints import router as router_v1
 from app.core.database import async_session
+from app.core.logger import setup_logging
 from app.core.outbox_publisher import outbox_publisher_loop
 from app.core.rabbitmq import rabbit_client
 from config import settings
+
+setup_logging(debug=settings.DEBUG)
 
 
 @asynccontextmanager

@@ -5,12 +5,14 @@ from fastapi import APIRouter, Depends, Query, Request, status, UploadFile, File
 
 from app.core.database import get_db
 from app.core.security import get_current_user_id
-from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse
-from app.services.beat import BeatService, PurchaseService
+from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse
+from app.services.beat import BeatService, PurchaseService, VoiceTagService
 from app.services.payment import PaymentService
 
 router = APIRouter(tags=["Beats Catalog"])
 
+
+# ─── Статичные маршруты (должны быть выше /{beat_id}) ────────────────────────
 
 @router.post("/", response_model=BeatResponse, status_code=status.HTTP_201_CREATED)
 async def upload_new_beat(
@@ -26,45 +28,6 @@ async def upload_new_beat(
         audio_full=audio_full,
         cover=cover,
         author_id=author_id,
-    )
-
-
-@router.get("/my-beats", response_model=PaginatedMyBeatsResponse)
-async def get_my_beats(
-        limit: int = Query(20, ge=1, le=100, description="Количество битов на странице"),
-        offset: int = Query(0, ge=0, description="Смещение"),
-        author_id: uuid.UUID = Depends(get_current_user_id),
-        db=Depends(get_db)
-):
-    service = BeatService(db)
-    return await service.get_my_beats(author_id, limit=limit, offset=offset)
-
-
-@router.get("/my-purchases", response_model=List[MyPurchaseResponse])
-async def get_my_purchases(
-        current_user_id: uuid.UUID = Depends(get_current_user_id),
-        db=Depends(get_db)
-):
-    service = PurchaseService(db)
-    return await service.get_my_purchases(current_user_id)
-
-
-@router.patch("/{beat_id}", response_model=BeatResponse)
-async def update_beat(
-        beat_id: uuid.UUID,
-        update_data: BeatUpdate,
-        current_user_id: uuid.UUID = Depends(get_current_user_id),
-        db=Depends(get_db)
-):
-    """
-    Частичное обновление данных бита (BPM, цена, жанр и т.д.).
-    Доступно только автору бита.
-    """
-    service = BeatService(db)
-    return await service.update_beat(
-        beat_id=beat_id,
-        current_user_id=current_user_id,
-        update_in=update_data
     )
 
 
@@ -93,15 +56,74 @@ async def get_beats_catalog(
     )
 
 
-@router.delete("/{beat_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_beat(
+@router.get("/my-beats", response_model=PaginatedMyBeatsResponse)
+async def get_my_beats(
+        limit: int = Query(20, ge=1, le=100, description="Количество битов на странице"),
+        offset: int = Query(0, ge=0, description="Смещение"),
+        author_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = BeatService(db)
+    return await service.get_my_beats(author_id, limit=limit, offset=offset)
+
+
+@router.get("/my-purchases", response_model=List[MyPurchaseResponse])
+async def get_my_purchases(
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = PurchaseService(db)
+    return await service.get_my_purchases(current_user_id)
+
+
+@router.post("/voice-tag", response_model=VoiceTagResponse, status_code=status.HTTP_201_CREATED)
+async def upload_voice_tag(
+        file: UploadFile = File(..., description="Войс-тег (MP3 или WAV, до 10 МБ)"),
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = VoiceTagService(db)
+    return await service.upload(file, current_user_id)
+
+
+@router.get("/voice-tag", response_model=VoiceTagResponse)
+async def get_voice_tag(
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = VoiceTagService(db)
+    return await service.get(current_user_id)
+
+
+@router.delete("/voice-tag", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_voice_tag(
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = VoiceTagService(db)
+    await service.delete(current_user_id)
+    return None
+
+
+@router.post("/webhook/payment", status_code=status.HTTP_200_OK)
+async def yookassa_webhook(request: Request, db=Depends(get_db)):
+    body = await request.json()
+    client_ip = request.headers.get("X-Real-IP") or (request.client.host if request.client else "")
+    service = PaymentService(db)
+    await service.handle_webhook(body, client_ip)
+    return {"status": "ok"}
+
+
+# ─── Параметрические маршруты /{beat_id} ─────────────────────────────────────
+
+@router.get("/{beat_id}/download", response_model=DownloadResponse)
+async def download_beat(
         beat_id: uuid.UUID,
         current_user_id: uuid.UUID = Depends(get_current_user_id),
         db=Depends(get_db)
 ):
-    service = BeatService(db)
-    await service.remove_beat(beat_id, current_user_id)
-    return None
+    service = PurchaseService(db)
+    return await service.get_download_url(beat_id, current_user_id)
 
 
 @router.post("/{beat_id}/checkout", response_model=CheckoutResponse, status_code=status.HTTP_201_CREATED)
@@ -114,15 +136,6 @@ async def checkout_beat(
     return await service.create_checkout(beat_id, buyer_id)
 
 
-@router.post("/webhook/payment", status_code=status.HTTP_200_OK)
-async def yookassa_webhook(request: Request, db=Depends(get_db)):
-    body = await request.json()
-    client_ip = request.headers.get("X-Real-IP") or (request.client.host if request.client else "")
-    service = PaymentService(db)
-    await service.handle_webhook(body, client_ip)
-    return {"status": "ok"}
-
-
 @router.post("/{beat_id}/purchase", response_model=PurchaseResponse, status_code=status.HTTP_201_CREATED)
 async def purchase_beat(
         beat_id: uuid.UUID,
@@ -133,11 +146,27 @@ async def purchase_beat(
     return await service.purchase_beat(beat_id, buyer_id)
 
 
-@router.get("/{beat_id}/download", response_model=DownloadResponse)
-async def download_beat(
+@router.patch("/{beat_id}", response_model=BeatResponse)
+async def update_beat(
+        beat_id: uuid.UUID,
+        update_data: BeatUpdate,
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = BeatService(db)
+    return await service.update_beat(
+        beat_id=beat_id,
+        current_user_id=current_user_id,
+        update_in=update_data
+    )
+
+
+@router.delete("/{beat_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_beat(
         beat_id: uuid.UUID,
         current_user_id: uuid.UUID = Depends(get_current_user_id),
         db=Depends(get_db)
 ):
-    service = PurchaseService(db)
-    return await service.get_download_url(beat_id, current_user_id)
+    service = BeatService(db)
+    await service.remove_beat(beat_id, current_user_id)
+    return None

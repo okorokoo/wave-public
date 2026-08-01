@@ -1,8 +1,12 @@
-import aioboto3
+import logging
 from contextlib import asynccontextmanager
+
+import aioboto3
 from fastapi import UploadFile
 
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class S3Storage:
@@ -29,7 +33,7 @@ class S3Storage:
                 await client.head_bucket(Bucket=self.bucket_name)
             except Exception:
                 await client.create_bucket(Bucket=self.bucket_name)
-                print(f"Bucket '{self.bucket_name}' successfully created!")
+                logger.info("S3 bucket '%s' created", self.bucket_name)
 
     async def check_connection(self) -> None:
         async with self._get_client() as client:

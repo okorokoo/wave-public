@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -6,6 +7,8 @@ from sqlalchemy import select
 from app.core.database import async_session
 from app.core.rabbitmq import rabbit_client
 from app.models.models import OutboxEvent
+
+logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 2
 MAX_BATCH = 10
@@ -42,7 +45,7 @@ async def outbox_publisher_loop(stop_event: asyncio.Event) -> None:
         try:
             await process_outbox_batch()
         except Exception as exc:
-            print(f"Outbox publisher error: {exc}")
+            logger.error("Outbox publisher error: %s", exc)
 
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=POLL_INTERVAL_SECONDS)

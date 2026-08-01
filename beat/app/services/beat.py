@@ -4,10 +4,10 @@ from typing import Optional, List
 from fastapi import HTTPException, status, UploadFile
 
 from app.core.broker import RabbitBroker
-from app.core.repo import BeatRepo, PurchaseRepo
+from app.core.repo import BeatRepo, PurchaseRepo, UserVoiceTagRepo
 from app.core.s3 import S3Storage
 from app.models.models import Beat
-from app.schemas.beat import BeatUpdate, BeatForm, BeatResponse, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, MyBeatResponse, PaginatedMyBeatsResponse
+from app.schemas.beat import BeatUpdate, BeatForm, BeatResponse, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, MyBeatResponse, PaginatedMyBeatsResponse, VoiceTagResponse
 from config import settings
 
 PREVIEW_PROCESSING = "processing"
@@ -17,11 +17,20 @@ ALLOWED_AUDIO_CONTENT_TYPES = {
     "audio/wave",
     "audio/vnd.wave",
 }
+ALLOWED_VOICE_TAG_CONTENT_TYPES = {
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/wave",
+}
+MAX_VOICE_TAG_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 class BeatService:
     def __init__(self, db):
         self.repo = BeatRepo(db)
+        self.voice_tag_repo = UserVoiceTagRepo(db)
         self.s3 = S3Storage()
         self.rmq = RabbitBroker(url=settings.rabbitmq_url)
 
@@ -107,12 +116,14 @@ class BeatService:
 
         new_beat = await self.repo.create(beat_data)
 
+        user_tag = await self.voice_tag_repo.get_by_user(author_id)
         await self.rmq.publish(
             queue_name="beat_processing_queue",
             body={
                 "beat_id": str(new_beat.id),
                 "full_audio_url": full_key,
                 "filename": audio_full.filename,
+                "voice_tag_key": user_tag.s3_key if user_tag else None,
             },
         )
 
@@ -190,6 +201,52 @@ class BeatService:
 
         await self.s3.delete_objects(keys)
         await self.repo.delete(beat)
+
+
+class VoiceTagService:
+    def __init__(self, db):
+        self.repo = UserVoiceTagRepo(db)
+        self.s3 = S3Storage()
+
+    async def upload(self, file: UploadFile, user_id: uuid.UUID) -> VoiceTagResponse:
+        filename = file.filename or ""
+        if (
+            file.content_type not in ALLOWED_VOICE_TAG_CONTENT_TYPES
+            and not filename.lower().endswith((".mp3", ".wav"))
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Войс-тег должен быть в формате MP3 или WAV",
+            )
+
+        content = await file.read()
+        if len(content) > MAX_VOICE_TAG_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Файл войс-тега не должен превышать 10 МБ",
+            )
+        await file.seek(0)
+
+        ext = "mp3" if "mp3" in (file.content_type or "") or filename.lower().endswith(".mp3") else "wav"
+        s3_key = f"voice_tags/{user_id}/voice_tag.{ext}"
+        await self.s3.upload_file(file, s3_key)
+
+        record = await self.repo.upsert(user_id, s3_key)
+        url = await self.s3.generate_presigned_url(s3_key)
+        return VoiceTagResponse(url=url, uploaded_at=record.uploaded_at)
+
+    async def get(self, user_id: uuid.UUID) -> VoiceTagResponse:
+        record = await self.repo.get_by_user(user_id)
+        if not record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Войс-тег не найден")
+        url = await self.s3.generate_presigned_url(record.s3_key)
+        return VoiceTagResponse(url=url, uploaded_at=record.uploaded_at)
+
+    async def delete(self, user_id: uuid.UUID) -> None:
+        s3_key = await self.repo.delete(user_id)
+        if not s3_key:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Войс-тег не найден")
+        await self.s3.delete_objects([s3_key])
 
 
 class PurchaseService:

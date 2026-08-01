@@ -1,7 +1,10 @@
+import logging
 import uuid
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+logger = logging.getLogger(__name__)
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy import select
@@ -94,7 +97,7 @@ async def register_user(
     try:
         await send_verification_email(new_user.email, verification_token)
     except Exception as e:
-        print(f"Email error: {e}")
+        logger.warning("Failed to send verification email: %s", e)
 
     return new_user
 
@@ -264,6 +267,6 @@ async def resend_verification(
     try:
         await send_verification_email(user.email, verification_token)
     except Exception as e:
-        print(f"Email error: {e}")
+        logger.warning("Failed to send verification email: %s", e)
 
     return generic_response

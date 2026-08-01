@@ -61,6 +61,11 @@ class CheckoutResponse(BaseModel):
     confirmation_url: str
 
 
+class VoiceTagResponse(BaseModel):
+    url: str
+    uploaded_at: datetime
+
+
 class MyPurchaseResponse(BaseModel):
     id: uuid.UUID
     license_type: str

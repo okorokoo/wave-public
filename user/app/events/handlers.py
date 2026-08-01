@@ -1,10 +1,13 @@
 import json
+import logging
 
 from aio_pika.abc import AbstractIncomingMessage
 
 from app.core.database import async_session
 from app.schemas.events import UserCreatedEvent
 from app.services.profile import ProfileService
+
+logger = logging.getLogger(__name__)
 
 
 async def handle_user_created(message: AbstractIncomingMessage):
@@ -20,4 +23,4 @@ async def handle_user_created(message: AbstractIncomingMessage):
             profile_service = ProfileService(db=db)
             await profile_service.create_empty_profile(user_id=event.user_id)
 
-        print(f" [OK] Профиль создан для {event.user_id}")
+        logger.info("Profile created for user %s", event.user_id)

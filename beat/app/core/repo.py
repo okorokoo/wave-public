@@ -4,7 +4,7 @@ from typing import Optional, Sequence, List
 from sqlalchemy import select, and_, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import Beat, Purchase, BeatTag, Payment
+from app.models.models import Beat, Purchase, BeatTag, Payment, UserVoiceTag
 
 
 def _normalize_tags(tags: List[str]) -> List[str]:
@@ -203,3 +203,34 @@ class PaymentRepo:
             record.status = new_status
             self.db.add(record)
             await self.db.commit()
+
+
+class UserVoiceTagRepo:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def get_by_user(self, user_id: uuid.UUID) -> Optional[UserVoiceTag]:
+        result = await self.db.execute(
+            select(UserVoiceTag).where(UserVoiceTag.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def upsert(self, user_id: uuid.UUID, s3_key: str) -> UserVoiceTag:
+        record = await self.get_by_user(user_id)
+        if record:
+            record.s3_key = s3_key
+        else:
+            record = UserVoiceTag(user_id=user_id, s3_key=s3_key)
+        self.db.add(record)
+        await self.db.commit()
+        await self.db.refresh(record)
+        return record
+
+    async def delete(self, user_id: uuid.UUID) -> Optional[str]:
+        record = await self.get_by_user(user_id)
+        if not record:
+            return None
+        s3_key = record.s3_key
+        await self.db.delete(record)
+        await self.db.commit()
+        return s3_key

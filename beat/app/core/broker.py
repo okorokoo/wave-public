@@ -1,7 +1,10 @@
 import json
+import logging
 from typing import Optional
 
 import aio_pika
+
+logger = logging.getLogger(__name__)
 from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, AbstractRobustQueue
 
 
@@ -45,4 +48,4 @@ class RabbitBroker:
                 ),
                 routing_key=queue_name
             )
-            print(f" [x] Sent task to RabbitMQ: {body}")
+            logger.debug("Published task to RabbitMQ queue '%s': %s", queue_name, body)
