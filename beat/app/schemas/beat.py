@@ -56,6 +56,11 @@ class DownloadResponse(BaseModel):
     download_url: str
 
 
+class CheckoutResponse(BaseModel):
+    payment_id: str
+    confirmation_url: str
+
+
 class MyPurchaseResponse(BaseModel):
     id: uuid.UUID
     license_type: str

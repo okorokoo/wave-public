@@ -42,3 +42,14 @@ class Purchase(Base):
     buyer_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     license_type = Column(String, nullable=False, default="basic")
     purchased_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id = Column(String, primary_key=True)  # YooKassa payment UUID string
+    beat_id = Column(UUID(as_uuid=True), ForeignKey("beats.id", ondelete="CASCADE"), nullable=False, index=True)
+    buyer_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    amount = Column(Numeric(10, 2), nullable=False)
+    status = Column(String, nullable=False, default="pending")  # pending / succeeded / canceled
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

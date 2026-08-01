@@ -4,7 +4,7 @@ from typing import Optional, Sequence, List
 from sqlalchemy import select, and_, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import Beat, Purchase, BeatTag
+from app.models.models import Beat, Purchase, BeatTag, Payment
 
 
 def _normalize_tags(tags: List[str]) -> List[str]:
@@ -168,3 +168,38 @@ class PurchaseRepo:
         )
         result = await self.db.execute(query)
         return result.all()
+
+
+class PaymentRepo:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create(
+        self,
+        payment_id: str,
+        beat_id: uuid.UUID,
+        buyer_id: uuid.UUID,
+        amount,
+    ) -> Payment:
+        record = Payment(
+            id=payment_id,
+            beat_id=beat_id,
+            buyer_id=buyer_id,
+            amount=amount,
+            status="pending",
+        )
+        self.db.add(record)
+        await self.db.commit()
+        await self.db.refresh(record)
+        return record
+
+    async def get_by_id(self, payment_id: str) -> Optional[Payment]:
+        result = await self.db.execute(select(Payment).where(Payment.id == payment_id))
+        return result.scalar_one_or_none()
+
+    async def update_status(self, payment_id: str, new_status: str) -> None:
+        record = await self.get_by_id(payment_id)
+        if record:
+            record.status = new_status
+            self.db.add(record)
+            await self.db.commit()

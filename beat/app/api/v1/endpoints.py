@@ -1,12 +1,13 @@
 import uuid
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query, status, UploadFile, File
+from fastapi import APIRouter, Depends, Query, Request, status, UploadFile, File
 
 from app.core.database import get_db
 from app.core.security import get_current_user_id
-from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse
+from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse
 from app.services.beat import BeatService, PurchaseService
+from app.services.payment import PaymentService
 
 router = APIRouter(tags=["Beats Catalog"])
 
@@ -101,6 +102,25 @@ async def delete_beat(
     service = BeatService(db)
     await service.remove_beat(beat_id, current_user_id)
     return None
+
+
+@router.post("/{beat_id}/checkout", response_model=CheckoutResponse, status_code=status.HTTP_201_CREATED)
+async def checkout_beat(
+        beat_id: uuid.UUID,
+        buyer_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = PaymentService(db)
+    return await service.create_checkout(beat_id, buyer_id)
+
+
+@router.post("/webhook/payment", status_code=status.HTTP_200_OK)
+async def yookassa_webhook(request: Request, db=Depends(get_db)):
+    body = await request.json()
+    client_ip = request.headers.get("X-Real-IP") or (request.client.host if request.client else "")
+    service = PaymentService(db)
+    await service.handle_webhook(body, client_ip)
+    return {"status": "ok"}
 
 
 @router.post("/{beat_id}/purchase", response_model=PurchaseResponse, status_code=status.HTTP_201_CREATED)

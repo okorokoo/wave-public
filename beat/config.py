@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     S3_DOWNLOAD_URL_EXPIRE_SECONDS: int = 3600
     MAX_AUDIO_UPLOAD_BYTES: int = 104_857_600  # 100 MB
 
+    # YooKassa
+    YOOKASSA_SHOP_ID: str = ""
+    YOOKASSA_SECRET_KEY: str = ""
+    YOOKASSA_RETURN_URL: str = "http://localhost:3000/payment/success"
+
     # Конфигурация загрузки из .env
     model_config = SettingsConfigDict(
         env_file=os.path.join(BASE_DIR, ".env"),
