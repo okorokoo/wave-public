@@ -22,6 +22,7 @@ class Beat(Base):
     cover_url = Column(String, nullable=True)
 
     author_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    author_name = Column(String, nullable=True)
     is_processed = Column(Boolean, nullable=False, default=False)
     is_deleted = Column(Boolean, nullable=False, default=False)
 

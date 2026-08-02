@@ -130,7 +130,7 @@ async def login(
             detail="Подтвердите email перед входом",
         )
 
-    access_token = create_access_token(data={"sub": str(user.id)})
+    access_token = create_access_token(data={"sub": str(user.id), "email": user.email})
     refresh_token_str = create_refresh_token(data={"sub": str(user.id)})
 
     new_refresh_token = RefreshToken(

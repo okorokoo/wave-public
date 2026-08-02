@@ -12,22 +12,26 @@ class TokenData(BaseModel):
     user_id: uuid.UUID
 
 
-async def get_current_user_id(auth: HTTPAuthorizationCredentials = Depends(security)) -> uuid.UUID:
+def _decode_payload(auth: HTTPAuthorizationCredentials) -> dict:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Не удалось валидировать учетные данные",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        token = auth.credentials
-        payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
-        )
-        user_id: str = payload.get("sub")  # В Auth мы обычно кладем ID в 'sub'
-        if user_id is None:
+        payload = jwt.decode(auth.credentials, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("sub") is None:
             raise credentials_exception
-        return uuid.UUID(user_id)
+        return payload
     except (JWTError, ValueError):
         raise credentials_exception
+
+
+async def get_current_user_id(auth: HTTPAuthorizationCredentials = Depends(security)) -> uuid.UUID:
+    payload = _decode_payload(auth)
+    return uuid.UUID(payload["sub"])
+
+
+async def get_current_user_email(auth: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    payload = _decode_payload(auth)
+    return payload.get("email", "")

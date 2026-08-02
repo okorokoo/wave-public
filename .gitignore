@@ -2,3 +2,10 @@
 *idea*
 .env
 /aws/minio_data
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/node_modules/.cache/
+beats-catalog-functional-prototype*

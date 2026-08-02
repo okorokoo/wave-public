@@ -38,6 +38,7 @@ class BeatResponse(BaseModel):
     cover_url: Optional[str] = None
     tags: List[str] = []
     author_id: uuid.UUID
+    author_name: Optional[str] = None
 
     class Config:
         from_attributes = True

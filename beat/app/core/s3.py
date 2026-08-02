@@ -60,11 +60,14 @@ class S3Storage:
         key = self._normalize_key(s3_key)
         ttl = expires_in or settings.S3_PRESIGNED_URL_EXPIRE_SECONDS
         async with self._get_client() as client:
-            return await client.generate_presigned_url(
+            url = await client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": self.bucket_name, "Key": key},
                 ExpiresIn=ttl,
             )
+        if settings.S3_PUBLIC_ENDPOINT_URL != self.endpoint_url:
+            url = url.replace(self.endpoint_url, settings.S3_PUBLIC_ENDPOINT_URL, 1)
+        return url
 
     async def delete_objects(self, keys: list[str]) -> None:
         normalized_keys = [

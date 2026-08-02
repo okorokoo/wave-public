@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, Request, status, UploadFile, File
 
 from app.core.database import get_db
-from app.core.security import get_current_user_id
+from app.core.security import get_current_user_id, get_current_user_email
 from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse
 from app.services.beat import BeatService, PurchaseService, VoiceTagService
 from app.services.payment import PaymentService
@@ -20,6 +20,7 @@ async def upload_new_beat(
         audio_full: UploadFile = File(..., description="Полная версия (WAV)"),
         cover: Optional[UploadFile] = File(None, description="Обложка бита (JPEG, PNG, WebP)"),
         author_id: uuid.UUID = Depends(get_current_user_id),
+        author_name: str = Depends(get_current_user_email),
         db=Depends(get_db)
 ):
     service = BeatService(db)
@@ -28,6 +29,7 @@ async def upload_new_beat(
         audio_full=audio_full,
         cover=cover,
         author_id=author_id,
+        author_name=author_name,
     )
 
 

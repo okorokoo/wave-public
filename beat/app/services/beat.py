@@ -56,6 +56,7 @@ class BeatService:
             cover_url=cover_url,
             tags=[bt.tag for bt in beat.tags],
             author_id=beat.author_id,
+            author_name=beat.author_name,
         )
 
     async def upload_beat(
@@ -63,6 +64,7 @@ class BeatService:
             beat_form: BeatForm,
             audio_full: UploadFile,
             author_id: uuid.UUID,
+            author_name: str = "",
             cover: Optional[UploadFile] = None,
     ) -> BeatResponse:
         filename = audio_full.filename or ""
@@ -109,6 +111,7 @@ class BeatService:
             "genre": beat_form.genre,
             "primary_instrument": beat_form.primary_instrument,
             "author_id": author_id,
+            "author_name": author_name or None,
             "audio_preview_url": PREVIEW_PROCESSING,
             "audio_full_url": full_key,
             "cover_url": cover_key,
