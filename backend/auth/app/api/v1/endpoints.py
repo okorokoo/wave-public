@@ -16,7 +16,7 @@ from app.core.email import send_verification_email
 from app.core.security import hash_password, create_refresh_token
 from app.core.security import verify_password, create_access_token
 from app.models.models import User, RefreshToken, EmailVerification, OutboxEvent
-from schemas.schemas import UserAuthRead, UserRegister, RefreshRequest, ResendVerificationRequest
+from schemas.schemas import UserAuthRead, UserRegister, RefreshRequest, ResendVerificationRequest, ChangePasswordRequest
 from config import settings
 
 router = APIRouter(prefix="/v1")
@@ -232,6 +232,21 @@ async def verify_email(
     await db.commit()
 
     return {"message": "Email успешно подтверждён"}
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+        data: ChangePasswordRequest,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
+):
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный текущий пароль")
+
+    current_user.hashed_password = hash_password(data.new_password)
+    db.add(current_user)
+    await db.commit()
+    return None
 
 
 @router.post("/resend-verification", status_code=status.HTTP_200_OK)
