@@ -245,6 +245,9 @@ async def change_password(
 
     current_user.hashed_password = hash_password(data.new_password)
     db.add(current_user)
+    await db.execute(
+        RefreshToken.__table__.delete().where(RefreshToken.user_id == current_user.id)
+    )
     await db.commit()
     return None
 
