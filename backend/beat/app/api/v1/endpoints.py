@@ -20,9 +20,11 @@ async def upload_new_beat(
         audio_full: UploadFile = File(..., description="Полная версия (WAV)"),
         cover: Optional[UploadFile] = File(None, description="Обложка бита (JPEG, PNG, WebP)"),
         author_id: uuid.UUID = Depends(get_current_user_id),
-        author_name: str = Depends(get_current_user_email),
+        author_email: str = Depends(get_current_user_email),
         db=Depends(get_db)
 ):
+    # Use explicit artist_name from form; fall back to email prefix
+    author_name = beat_in.artist_name or author_email.split('@')[0]
     service = BeatService(db)
     return await service.upload_beat(
         beat_form=beat_in,

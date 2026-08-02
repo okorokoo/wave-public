@@ -108,6 +108,7 @@ class BeatForm:
         genre: Optional[str] = Form(None),
         primary_instrument: Optional[str] = Form(None),
         tags: List[str] = Form(default=[]),
+        artist_name: Optional[str] = Form(None, max_length=60),
     ):
         self.title = title
         self.bpm = bpm
@@ -116,3 +117,4 @@ class BeatForm:
         self.genre = genre
         self.primary_instrument = primary_instrument
         self.tags = tags
+        self.artist_name = artist_name
