@@ -25,6 +25,12 @@ class User(Base):
         index=True,
         nullable=False
     )
+    username: Mapped[str] = mapped_column(
+        String(30),
+        unique=True,
+        index=True,
+        nullable=False
+    )
     hashed_password: Mapped[str] = mapped_column(
         String(1024),
         nullable=False

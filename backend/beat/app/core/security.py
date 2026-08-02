@@ -35,3 +35,13 @@ async def get_current_user_id(auth: HTTPAuthorizationCredentials = Depends(secur
 async def get_current_user_email(auth: HTTPAuthorizationCredentials = Depends(security)) -> str:
     payload = _decode_payload(auth)
     return payload.get("email", "")
+
+
+async def get_current_user_username(auth: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    payload = _decode_payload(auth)
+    # Fallback to email prefix for tokens issued before username was added
+    username = payload.get("username")
+    if username:
+        return username
+    email = payload.get("email", "")
+    return email.split("@")[0]

@@ -164,11 +164,12 @@ class BeatService:
             min_bpm: Optional[int] = None,
             max_bpm: Optional[int] = None,
             tag: Optional[str] = None,
+            author_id: Optional[uuid.UUID] = None,
             limit: int = 20,
             offset: int = 0,
     ) -> PaginatedBeatsResponse:
-        total = await self.repo.count_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm, tag=tag)
-        beats = await self.repo.list_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm, tag=tag, limit=limit, offset=offset)
+        total = await self.repo.count_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm, tag=tag, author_id=author_id)
+        beats = await self.repo.list_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm, tag=tag, author_id=author_id, limit=limit, offset=offset)
         items = [await self._to_response(b) for b in beats]
         return PaginatedBeatsResponse(items=items, total=total, limit=limit, offset=offset)
 

@@ -21,6 +21,6 @@ async def handle_user_created(message: AbstractIncomingMessage):
         async with async_session() as db:
             # Вызываем сервисный слой
             profile_service = ProfileService(db=db)
-            await profile_service.create_empty_profile(user_id=event.user_id)
+            await profile_service.create_empty_profile(user_id=event.user_id, username=event.username)
 
         logger.info("Profile created for user %s", event.user_id)

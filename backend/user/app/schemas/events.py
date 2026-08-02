@@ -1,7 +1,9 @@
 import uuid
+from typing import Optional
 
 from pydantic import BaseModel
 
 
 class UserCreatedEvent(BaseModel):
     user_id: uuid.UUID
+    username: Optional[str] = None

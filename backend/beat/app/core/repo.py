@@ -64,6 +64,7 @@ class BeatRepo:
             min_bpm: Optional[int],
             max_bpm: Optional[int],
             tag: Optional[str] = None,
+            author_id: Optional[uuid.UUID] = None,
     ) -> list:
         filters = [Beat.is_deleted == False]  # noqa: E712
         if search:
@@ -80,6 +81,8 @@ class BeatRepo:
             filters.append(Beat.id.in_(
                 select(BeatTag.beat_id).where(BeatTag.tag == tag.strip().lower())
             ))
+        if author_id:
+            filters.append(Beat.author_id == author_id)
         return filters
 
     async def count_beats(
@@ -90,8 +93,9 @@ class BeatRepo:
             min_bpm: Optional[int] = None,
             max_bpm: Optional[int] = None,
             tag: Optional[str] = None,
+            author_id: Optional[uuid.UUID] = None,
     ) -> int:
-        filters = self._build_filters(search, genre, instrument, min_bpm, max_bpm, tag=tag)
+        filters = self._build_filters(search, genre, instrument, min_bpm, max_bpm, tag=tag, author_id=author_id)
         query = select(func.count()).select_from(Beat)
         if filters:
             query = query.where(and_(*filters))
@@ -106,10 +110,11 @@ class BeatRepo:
             min_bpm: Optional[int] = None,
             max_bpm: Optional[int] = None,
             tag: Optional[str] = None,
+            author_id: Optional[uuid.UUID] = None,
             limit: int = 20,
             offset: int = 0,
     ) -> Sequence[Beat]:
-        filters = self._build_filters(search, genre, instrument, min_bpm, max_bpm, tag=tag)
+        filters = self._build_filters(search, genre, instrument, min_bpm, max_bpm, tag=tag, author_id=author_id)
         query = select(Beat)
         if filters:
             query = query.where(and_(*filters))

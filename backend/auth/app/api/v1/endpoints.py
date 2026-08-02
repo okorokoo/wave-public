@@ -67,6 +67,7 @@ async def register_user(
 
     new_user = User(
         email=user_in.email,
+        username=user_in.username,
         hashed_password=hash_password(user_in.password)
     )
 
@@ -84,7 +85,7 @@ async def register_user(
         outbox_event = OutboxEvent(
             event_type="user_created",
             routing_key="user_created",
-            payload={"user_id": str(new_user.id)},
+            payload={"user_id": str(new_user.id), "username": user_in.username},
         )
         db.add(verification)
         db.add(outbox_event)
@@ -130,7 +131,7 @@ async def login(
             detail="Подтвердите email перед входом",
         )
 
-    access_token = create_access_token(data={"sub": str(user.id), "email": user.email})
+    access_token = create_access_token(data={"sub": str(user.id), "email": user.email, "username": user.username})
     refresh_token_str = create_refresh_token(data={"sub": str(user.id)})
 
     new_refresh_token = RefreshToken(

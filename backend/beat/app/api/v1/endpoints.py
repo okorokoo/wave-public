@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, Request, status, UploadFile, File
 
 from app.core.database import get_db
-from app.core.security import get_current_user_id, get_current_user_email
+from app.core.security import get_current_user_id, get_current_user_username
 from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse
 from app.services.beat import BeatService, PurchaseService, VoiceTagService
 from app.services.payment import PaymentService
@@ -20,11 +20,9 @@ async def upload_new_beat(
         audio_full: UploadFile = File(..., description="Полная версия (WAV)"),
         cover: Optional[UploadFile] = File(None, description="Обложка бита (JPEG, PNG, WebP)"),
         author_id: uuid.UUID = Depends(get_current_user_id),
-        author_email: str = Depends(get_current_user_email),
+        author_name: str = Depends(get_current_user_username),
         db=Depends(get_db)
 ):
-    # Use explicit artist_name from form; fall back to email prefix
-    author_name = beat_in.artist_name or author_email.split('@')[0]
     service = BeatService(db)
     return await service.upload_beat(
         beat_form=beat_in,
@@ -43,6 +41,7 @@ async def get_beats_catalog(
         tag: Optional[str] = Query(None, description="Фильтр по тегу"),
         min_bpm: Optional[int] = Query(None, ge=40, le=300, description="Минимальный темп"),
         max_bpm: Optional[int] = Query(None, ge=40, le=300, description="Максимальный темп"),
+        author_id: Optional[uuid.UUID] = Query(None, description="Фильтр по автору"),
         limit: int = Query(20, ge=1, le=100, description="Количество битов на странице"),
         offset: int = Query(0, ge=0, description="Смещение"),
         db=Depends(get_db)
@@ -55,6 +54,7 @@ async def get_beats_catalog(
         tag=tag,
         min_bpm=min_bpm,
         max_bpm=max_bpm,
+        author_id=author_id,
         limit=limit,
         offset=offset,
     )

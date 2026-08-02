@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     def rabbitmq_url(self) -> str:
         return f"amqp://{self.RABBITMQ_LOGIN}:{self.RABBITMQ_PASSWORD}@rabbitmq:{self.RABBITMQ_PORT}/"
 
+    # S3 / MinIO (shared bucket with beat-service)
+    S3_ENDPOINT_URL: str = "http://minio:9000"
+    S3_PUBLIC_ENDPOINT_URL: str = "http://localhost:9000"
+    S3_ACCESS_KEY: str = "minioadmin"
+    S3_SECRET_KEY: str = "minioadminpassword"
+    S3_BUCKET_NAME: str = "wave-beats"
+    S3_PRESIGNED_URL_EXPIRE_SECONDS: int = 3600
+
     # Конфигурация загрузки из .env
     model_config = SettingsConfigDict(
         env_file=os.path.join(BASE_DIR, ".env"),
