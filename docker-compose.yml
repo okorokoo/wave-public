@@ -15,7 +15,7 @@ services:
 
   auth-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: auth/Dockerfile
     env_file:
       - .env
@@ -41,7 +41,7 @@ services:
 
   user-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: user/Dockerfile
     env_file:
       - .env
@@ -80,7 +80,7 @@ services:
 
   beat-service:
     build:
-      context: .
+      context: ./backend
       dockerfile: beat/Dockerfile
     env_file:
       - .env
@@ -95,7 +95,7 @@ services:
 
   beat-worker:
     build:
-      context: .
+      context: ./backend
       dockerfile: beat/Dockerfile
     command: python worker.py
     env_file:
@@ -109,7 +109,7 @@ services:
       minio:
         condition: service_healthy
     volumes:
-      - ./beat/assets:/beat/assets
+      - ./backend/beat/assets:/beat/assets
 
 
   nginx:
@@ -117,7 +117,7 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./backend/nginx/nginx.conf:/etc/nginx/conf.d/default.conf
       - ./frontend:/usr/share/nginx/html:ro
     depends_on:
       - auth-service
