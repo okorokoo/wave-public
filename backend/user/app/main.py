@@ -8,7 +8,7 @@ from app.api.v1.endpoints import router as router_v1
 from app.core.broker import RabbitBroker
 from app.core.database import async_session
 from app.core.logger import setup_logging
-from app.events.handlers import handle_user_created
+from app.events.handlers import handle_user_created, handle_user_deleted
 from config import settings
 
 setup_logging(debug=settings.DEBUG)
@@ -21,14 +21,18 @@ async def lifespan(app: FastAPI):
     await broker.connect()
     app.state.broker = broker
 
-    queue = await broker.declare_queue("user_created")
-    consumer_tag = await queue.consume(handle_user_created)
+    queue_created = await broker.declare_queue("user_created")
+    tag_created = await queue_created.consume(handle_user_created)
 
-    logger.info("RabbitMQ consumer started, listening on 'user_created'")
+    queue_deleted = await broker.declare_queue("user_deleted")
+    tag_deleted = await queue_deleted.consume(handle_user_deleted)
+
+    logger.info("RabbitMQ consumers started")
 
     yield
 
-    await queue.cancel(consumer_tag)
+    await queue_created.cancel(tag_created)
+    await queue_deleted.cancel(tag_deleted)
     await broker.close()
 
 

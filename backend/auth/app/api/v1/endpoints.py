@@ -16,7 +16,7 @@ from app.core.email import send_verification_email
 from app.core.security import hash_password, create_refresh_token
 from app.core.security import verify_password, create_access_token
 from app.models.models import User, RefreshToken, EmailVerification, OutboxEvent
-from schemas.schemas import UserAuthRead, UserRegister, RefreshRequest, ResendVerificationRequest, ChangePasswordRequest
+from schemas.schemas import UserAuthRead, UserRegister, RefreshRequest, ResendVerificationRequest, ChangePasswordRequest, DeleteAccountRequest
 from config import settings
 
 router = APIRouter(prefix="/v1")
@@ -248,6 +248,26 @@ async def change_password(
     await db.execute(
         RefreshToken.__table__.delete().where(RefreshToken.user_id == current_user.id)
     )
+    await db.commit()
+    return None
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_account(
+        data: DeleteAccountRequest,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
+):
+    if not verify_password(data.password, current_user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неверный пароль")
+
+    outbox_event = OutboxEvent(
+        event_type="user_deleted",
+        routing_key="user_deleted",
+        payload={"user_id": str(current_user.id)},
+    )
+    db.add(outbox_event)
+    await db.delete(current_user)
     await db.commit()
     return None
 

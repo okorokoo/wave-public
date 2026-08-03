@@ -4,9 +4,11 @@ from fastapi import FastAPI, Response
 from sqlalchemy import text
 
 from app.api.v1.endpoints import router as router_v1
+from app.core.broker import RabbitBroker
 from app.core.database import async_session
 from app.core.logger import setup_logging
 from app.core.s3 import S3Storage
+from app.events.handlers import handle_user_deleted
 from config import settings
 
 setup_logging(debug=settings.DEBUG)
@@ -17,7 +19,18 @@ s3_storage = S3Storage()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await s3_storage.create_bucket_if_not_exists()
+
+    broker = RabbitBroker(settings.rabbitmq_url)
+    await broker.connect()
+    app.state.broker = broker
+
+    queue = await broker.declare_queue("user_deleted")
+    tag = await queue.consume(handle_user_deleted)
+
     yield
+
+    await queue.cancel(tag)
+    await broker.close()
 
 
 _docs = "/docs" if settings.DEBUG else None
