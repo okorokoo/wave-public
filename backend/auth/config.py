@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     SMTP_HOST: str = "mailhog"
     SMTP_PORT: int = 1025
     EMAIL_FROM: str = "noreply@wave.local"
-    BASE_URL: str = "http://localhost/auth"
+    BASE_URL: str = "http://localhost"
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
 
     # Конфигурация загрузки из .env
