@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import String, UUID, Text, JSON
+from sqlalchemy import String, UUID, Text, JSON, ForeignKey, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase
 
 
@@ -17,3 +17,15 @@ class Profile(Base):
     bio: Mapped[str] = mapped_column(Text, nullable=True)
     avatar_url: Mapped[str] = mapped_column(String, nullable=True)
     social_links: Mapped[dict] = mapped_column(JSON, default={})  # {"soundcloud": "...", "instagram": "..."}
+
+
+class Follow(Base):
+    __tablename__ = "follows"
+
+    follower_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.user_id", ondelete="CASCADE"), primary_key=True
+    )
+    following_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.user_id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -1,8 +1,8 @@
 import uuid
 from typing import Optional
 
-from app.models.models import Profile
-from sqlalchemy import select, func
+from app.models.models import Profile, Follow
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -50,3 +50,46 @@ class ProfileRepo:
         await self.db.commit()
         await self.db.refresh(profile)
         return profile
+
+
+class FollowRepo:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def toggle(self, follower_id: uuid.UUID, following_id: uuid.UUID) -> tuple[bool, int]:
+        existing = await self.db.execute(
+            select(Follow).where(and_(Follow.follower_id == follower_id, Follow.following_id == following_id))
+        )
+        follow = existing.scalar_one_or_none()
+        if follow:
+            await self.db.delete(follow)
+            is_following = False
+        else:
+            self.db.add(Follow(follower_id=follower_id, following_id=following_id))
+            is_following = True
+        await self.db.commit()
+        followers_count = await self._count_followers(following_id)
+        return is_following, followers_count
+
+    async def _count_followers(self, user_id: uuid.UUID) -> int:
+        result = await self.db.execute(
+            select(func.count()).select_from(Follow).where(Follow.following_id == user_id)
+        )
+        return result.scalar_one()
+
+    async def _count_following(self, user_id: uuid.UUID) -> int:
+        result = await self.db.execute(
+            select(func.count()).select_from(Follow).where(Follow.follower_id == user_id)
+        )
+        return result.scalar_one()
+
+    async def get_counts(self, user_id: uuid.UUID) -> tuple[int, int]:
+        followers = await self._count_followers(user_id)
+        following = await self._count_following(user_id)
+        return followers, following
+
+    async def is_following(self, follower_id: uuid.UUID, following_id: uuid.UUID) -> bool:
+        result = await self.db.execute(
+            select(Follow).where(and_(Follow.follower_id == follower_id, Follow.following_id == following_id))
+        )
+        return result.scalar_one_or_none() is not None

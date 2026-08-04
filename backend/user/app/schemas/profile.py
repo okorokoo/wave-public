@@ -19,6 +19,9 @@ class ProfileRead(BaseModel):
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
     social_links: Dict[str, str] = Field(default_factory=dict)
+    followers_count: int = 0
+    following_count: int = 0
+    is_following: bool = False
 
     class Config:
         from_attributes = True
@@ -26,3 +29,8 @@ class ProfileRead(BaseModel):
 
 class AvatarResponse(BaseModel):
     avatar_url: str
+
+
+class FollowToggleResponse(BaseModel):
+    is_following: bool
+    followers_count: int

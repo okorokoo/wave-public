@@ -5,10 +5,10 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
-from app.core.repo import ProfileRepo
+from app.core.repo import ProfileRepo, FollowRepo
 from app.core.s3 import S3Storage
 from app.models.models import Profile
-from app.schemas.profile import ProfileUpdate
+from app.schemas.profile import ProfileUpdate, FollowToggleResponse
 
 ALLOWED_AVATAR_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5 MB
@@ -17,6 +17,7 @@ MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5 MB
 class ProfileService:
     def __init__(self, db: AsyncSession):
         self._repo = ProfileRepo(db=db)
+        self._follow_repo = FollowRepo(db=db)
         self._s3 = S3Storage()
 
     async def create_empty_profile(self, user_id: uuid.UUID, username: Optional[str] = None) -> Profile:
@@ -25,25 +26,34 @@ class ProfileService:
     async def check_username_available(self, username: str) -> bool:
         return await self._repo.is_username_available(username)
 
-    async def get_profile_by_username(self, username: str) -> dict:
+    async def get_profile_by_username(self, username: str, viewer_id: Optional[uuid.UUID] = None) -> dict:
         profile = await self._repo.get_by_username(username)
         if not profile:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
-        return await self._build_profile_dict(profile)
+        return await self._build_profile_dict(profile, viewer_id=viewer_id)
 
-    async def _build_profile_dict(self, profile: Profile) -> dict:
+    async def _build_profile_dict(self, profile: Profile, viewer_id: Optional[uuid.UUID] = None) -> dict:
         avatar_url: Optional[str] = None
         if profile.avatar_url:
             try:
                 avatar_url = await self._s3.generate_presigned_url(profile.avatar_url)
             except Exception:
                 avatar_url = None
+        followers_count, following_count = await self._follow_repo.get_counts(profile.user_id)
+        is_following = (
+            await self._follow_repo.is_following(viewer_id, profile.user_id)
+            if viewer_id and viewer_id != profile.user_id
+            else False
+        )
         return {
             "user_id": profile.user_id,
             "username": profile.username,
             "bio": profile.bio,
             "avatar_url": avatar_url,
             "social_links": profile.social_links or {},
+            "followers_count": followers_count,
+            "following_count": following_count,
+            "is_following": is_following,
         }
 
     async def get_my_profile(self, user_id: uuid.UUID) -> dict:
@@ -102,3 +112,18 @@ class ProfileService:
         await self._repo.update_profile(profile, {"avatar_url": s3_key})
 
         return await self._s3.generate_presigned_url(s3_key)
+
+
+class FollowService:
+    def __init__(self, db: AsyncSession):
+        self._repo = FollowRepo(db=db)
+        self._profile_repo = ProfileRepo(db=db)
+
+    async def toggle(self, follower_id: uuid.UUID, following_id: uuid.UUID) -> FollowToggleResponse:
+        if follower_id == following_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нельзя подписаться на себя")
+        target = await self._profile_repo.get_by_user_id(following_id)
+        if not target:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+        is_following, followers_count = await self._repo.toggle(follower_id, following_id)
+        return FollowToggleResponse(is_following=is_following, followers_count=followers_count)
