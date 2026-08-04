@@ -4,10 +4,10 @@ from typing import Optional, List
 from fastapi import HTTPException, status, UploadFile
 
 from app.core.broker import RabbitBroker
-from app.core.repo import BeatRepo, PurchaseRepo, UserVoiceTagRepo
+from app.core.repo import BeatRepo, PurchaseRepo, UserVoiceTagRepo, LikeRepo
 from app.core.s3 import S3Storage
 from app.models.models import Beat
-from app.schemas.beat import BeatUpdate, BeatForm, BeatResponse, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, MyBeatResponse, PaginatedMyBeatsResponse, VoiceTagResponse
+from app.schemas.beat import BeatUpdate, BeatForm, BeatResponse, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, MyBeatResponse, PaginatedMyBeatsResponse, VoiceTagResponse, LikeToggleResponse
 from config import settings
 
 PREVIEW_PROCESSING = "processing"
@@ -33,10 +33,11 @@ class BeatService:
         self.repo = BeatRepo(db)
         self.purchase_repo = PurchaseRepo(db)
         self.voice_tag_repo = UserVoiceTagRepo(db)
+        self.like_repo = LikeRepo(db)
         self.s3 = S3Storage()
         self.rmq = RabbitBroker(url=settings.rabbitmq_url)
 
-    async def _to_response(self, beat: Beat) -> BeatResponse:
+    async def _to_response(self, beat: Beat, likes_count: int = 0, is_liked: bool = False) -> BeatResponse:
         if beat.audio_preview_url in (PREVIEW_PROCESSING, BEAT_DELETED):
             preview_url = beat.audio_preview_url
         else:
@@ -57,6 +58,8 @@ class BeatService:
             tags=[bt.tag for bt in beat.tags],
             author_id=beat.author_id,
             author_name=beat.author_name,
+            likes_count=likes_count,
+            is_liked=is_liked,
         )
 
     async def upload_beat(
@@ -167,10 +170,19 @@ class BeatService:
             author_id: Optional[uuid.UUID] = None,
             limit: int = 20,
             offset: int = 0,
+            user_id: Optional[uuid.UUID] = None,
     ) -> PaginatedBeatsResponse:
         total = await self.repo.count_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm, tag=tag, author_id=author_id)
         beats = await self.repo.list_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm, tag=tag, author_id=author_id, limit=limit, offset=offset)
-        items = [await self._to_response(b) for b in beats]
+
+        beat_ids = [b.id for b in beats]
+        counts = await self.like_repo.get_counts(beat_ids)
+        liked_set = await self.like_repo.get_liked_set(user_id, beat_ids) if user_id else set()
+
+        items = [
+            await self._to_response(b, likes_count=counts.get(b.id, 0), is_liked=b.id in liked_set)
+            for b in beats
+        ]
         return PaginatedBeatsResponse(items=items, total=total, limit=limit, offset=offset)
 
     async def get_my_beats(
@@ -221,6 +233,32 @@ class BeatService:
                 keys.append(beat.cover_url)
             await self.s3.delete_objects(keys)
             await self.repo.delete(beat)
+
+
+class LikeService:
+    def __init__(self, db):
+        self.like_repo = LikeRepo(db)
+        self.beat_repo = BeatRepo(db)
+        self.s3 = S3Storage()
+
+    async def toggle(self, beat_id: uuid.UUID, user_id: uuid.UUID) -> LikeToggleResponse:
+        beat = await self.beat_repo.get_by_id(beat_id)
+        if not beat or beat.is_deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бит не найден")
+        liked, count = await self.like_repo.toggle(beat_id, user_id)
+        return LikeToggleResponse(liked=liked, likes_count=count)
+
+    async def get_liked_beats(self, user_id: uuid.UUID) -> PaginatedBeatsResponse:
+        beats = await self.like_repo.get_liked_beats(user_id)
+        beat_ids = [b.id for b in beats]
+        counts = await self.like_repo.get_counts(beat_ids)
+        beat_service = BeatService.__new__(BeatService)
+        beat_service.s3 = self.s3
+        items = [
+            await beat_service._to_response(b, likes_count=counts.get(b.id, 0), is_liked=True)
+            for b in beats
+        ]
+        return PaginatedBeatsResponse(items=items, total=len(items), limit=len(items), offset=0)
 
 
 class VoiceTagService:

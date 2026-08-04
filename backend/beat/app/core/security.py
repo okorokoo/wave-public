@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
@@ -6,6 +8,7 @@ import uuid
 from config import settings
 
 security = HTTPBearer()
+security_optional = HTTPBearer(auto_error=False)
 
 
 class TokenData(BaseModel):
@@ -39,9 +42,21 @@ async def get_current_user_email(auth: HTTPAuthorizationCredentials = Depends(se
 
 async def get_current_user_username(auth: HTTPAuthorizationCredentials = Depends(security)) -> str:
     payload = _decode_payload(auth)
-    # Fallback to email prefix for tokens issued before username was added
     username = payload.get("username")
     if username:
         return username
     email = payload.get("email", "")
     return email.split("@")[0]
+
+
+async def get_optional_user_id(
+    auth: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
+) -> Optional[uuid.UUID]:
+    if not auth:
+        return None
+    try:
+        payload = jwt.decode(auth.credentials, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        sub = payload.get("sub")
+        return uuid.UUID(sub) if sub else None
+    except (JWTError, ValueError):
+        return None

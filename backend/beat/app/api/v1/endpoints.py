@@ -4,9 +4,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, Request, status, UploadFile, File
 
 from app.core.database import get_db
-from app.core.security import get_current_user_id, get_current_user_username
-from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse
-from app.services.beat import BeatService, PurchaseService, VoiceTagService
+from app.core.security import get_current_user_id, get_current_user_username, get_optional_user_id
+from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse, LikeToggleResponse
+from app.services.beat import BeatService, PurchaseService, VoiceTagService, LikeService
 from app.services.payment import PaymentService
 
 router = APIRouter(tags=["Beats Catalog"])
@@ -44,6 +44,7 @@ async def get_beats_catalog(
         author_id: Optional[uuid.UUID] = Query(None, description="Фильтр по автору"),
         limit: int = Query(20, ge=1, le=100, description="Количество битов на странице"),
         offset: int = Query(0, ge=0, description="Смещение"),
+        user_id: Optional[uuid.UUID] = Depends(get_optional_user_id),
         db=Depends(get_db)
 ):
     service = BeatService(db)
@@ -57,7 +58,17 @@ async def get_beats_catalog(
         author_id=author_id,
         limit=limit,
         offset=offset,
+        user_id=user_id,
     )
+
+
+@router.get("/liked", response_model=PaginatedBeatsResponse)
+async def get_liked_beats(
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = LikeService(db)
+    return await service.get_liked_beats(current_user_id)
 
 
 @router.get("/my-beats", response_model=PaginatedMyBeatsResponse)
@@ -129,6 +140,16 @@ async def yookassa_webhook(request: Request, db=Depends(get_db)):
 
 
 # ─── Параметрические маршруты /{beat_id} ─────────────────────────────────────
+
+@router.post("/{beat_id}/like", response_model=LikeToggleResponse)
+async def toggle_like(
+        beat_id: uuid.UUID,
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = LikeService(db)
+    return await service.toggle(beat_id, current_user_id)
+
 
 @router.get("/{beat_id}/download", response_model=DownloadResponse)
 async def download_beat(

@@ -47,6 +47,14 @@ class Purchase(Base):
     purchased_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class BeatLike(Base):
+    __tablename__ = "beat_likes"
+
+    beat_id = Column(UUID(as_uuid=True), ForeignKey("beats.id", ondelete="CASCADE"), primary_key=True)
+    user_id = Column(UUID(as_uuid=True), nullable=False, primary_key=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class UserVoiceTag(Base):
     __tablename__ = "user_voice_tags"
 

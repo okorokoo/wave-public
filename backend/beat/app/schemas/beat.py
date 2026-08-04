@@ -39,6 +39,8 @@ class BeatResponse(BaseModel):
     tags: List[str] = []
     author_id: uuid.UUID
     author_name: Optional[str] = None
+    likes_count: int = 0
+    is_liked: bool = False
 
     class Config:
         from_attributes = True
@@ -85,6 +87,11 @@ class PaginatedBeatsResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class LikeToggleResponse(BaseModel):
+    liked: bool
+    likes_count: int
 
 
 class MyBeatResponse(BeatResponse):

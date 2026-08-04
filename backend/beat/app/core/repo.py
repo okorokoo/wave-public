@@ -4,7 +4,7 @@ from typing import Optional, Sequence, List
 from sqlalchemy import select, and_, func, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import Beat, Purchase, BeatTag, Payment, UserVoiceTag
+from app.models.models import Beat, Purchase, BeatTag, Payment, UserVoiceTag, BeatLike
 
 
 def _normalize_tags(tags: List[str]) -> List[str]:
@@ -234,6 +234,63 @@ class PaymentRepo:
             update(Payment).where(Payment.id == payment_id).values(status=new_status)
         )
         await self.db.commit()
+
+
+class LikeRepo:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def toggle(self, beat_id: uuid.UUID, user_id: uuid.UUID) -> tuple[bool, int]:
+        existing = await self.db.execute(
+            select(BeatLike).where(and_(BeatLike.beat_id == beat_id, BeatLike.user_id == user_id))
+        )
+        like = existing.scalar_one_or_none()
+
+        if like:
+            await self.db.delete(like)
+            liked = False
+        else:
+            self.db.add(BeatLike(beat_id=beat_id, user_id=user_id))
+            liked = True
+
+        await self.db.commit()
+        count = await self._count(beat_id)
+        return liked, count
+
+    async def _count(self, beat_id: uuid.UUID) -> int:
+        result = await self.db.execute(
+            select(func.count()).select_from(BeatLike).where(BeatLike.beat_id == beat_id)
+        )
+        return result.scalar_one()
+
+    async def get_counts(self, beat_ids: List[uuid.UUID]) -> dict[uuid.UUID, int]:
+        if not beat_ids:
+            return {}
+        result = await self.db.execute(
+            select(BeatLike.beat_id, func.count().label("cnt"))
+            .where(BeatLike.beat_id.in_(beat_ids))
+            .group_by(BeatLike.beat_id)
+        )
+        return {row.beat_id: row.cnt for row in result}
+
+    async def get_liked_set(self, user_id: uuid.UUID, beat_ids: List[uuid.UUID]) -> set[uuid.UUID]:
+        if not beat_ids:
+            return set()
+        result = await self.db.execute(
+            select(BeatLike.beat_id).where(
+                and_(BeatLike.user_id == user_id, BeatLike.beat_id.in_(beat_ids))
+            )
+        )
+        return {row.beat_id for row in result}
+
+    async def get_liked_beats(self, user_id: uuid.UUID) -> List[Beat]:
+        result = await self.db.execute(
+            select(Beat)
+            .join(BeatLike, BeatLike.beat_id == Beat.id)
+            .where(and_(BeatLike.user_id == user_id, Beat.is_deleted == False))  # noqa: E712
+            .order_by(BeatLike.created_at.desc())
+        )
+        return list(result.scalars().all())
 
 
 class UserVoiceTagRepo:
