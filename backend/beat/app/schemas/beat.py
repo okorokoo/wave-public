@@ -41,6 +41,7 @@ class BeatResponse(BaseModel):
     author_name: Optional[str] = None
     likes_count: int = 0
     is_liked: bool = False
+    play_count: int = 0
 
     class Config:
         from_attributes = True
@@ -92,6 +93,10 @@ class PaginatedBeatsResponse(BaseModel):
 class LikeToggleResponse(BaseModel):
     liked: bool
     likes_count: int
+
+
+class PlayCountResponse(BaseModel):
+    play_count: int
 
 
 class MyBeatResponse(BeatResponse):

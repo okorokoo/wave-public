@@ -25,6 +25,7 @@ class Beat(Base):
     author_name = Column(String, nullable=True)
     is_processed = Column(Boolean, nullable=False, default=False)
     is_deleted = Column(Boolean, nullable=False, default=False)
+    play_count = Column(Integer, nullable=False, default=0)
 
     tags = relationship("BeatTag", lazy="selectin", cascade="all, delete-orphan")
 

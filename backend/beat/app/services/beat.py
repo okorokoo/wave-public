@@ -7,7 +7,7 @@ from app.core.broker import RabbitBroker
 from app.core.repo import BeatRepo, PurchaseRepo, UserVoiceTagRepo, LikeRepo
 from app.core.s3 import S3Storage
 from app.models.models import Beat
-from app.schemas.beat import BeatUpdate, BeatForm, BeatResponse, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, MyBeatResponse, PaginatedMyBeatsResponse, VoiceTagResponse, LikeToggleResponse
+from app.schemas.beat import BeatUpdate, BeatForm, BeatResponse, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, MyBeatResponse, PaginatedMyBeatsResponse, VoiceTagResponse, LikeToggleResponse, PlayCountResponse
 from config import settings
 
 PREVIEW_PROCESSING = "processing"
@@ -60,6 +60,7 @@ class BeatService:
             author_name=beat.author_name,
             likes_count=likes_count,
             is_liked=is_liked,
+            play_count=beat.play_count,
         )
 
     async def upload_beat(
@@ -305,6 +306,18 @@ class VoiceTagService:
         if not s3_key:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Войс-тег не найден")
         await self.s3.delete_objects([s3_key])
+
+
+class PlayService:
+    def __init__(self, db):
+        self.repo = BeatRepo(db)
+
+    async def record_play(self, beat_id: uuid.UUID) -> PlayCountResponse:
+        beat = await self.repo.get_by_id(beat_id)
+        if not beat or beat.is_deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бит не найден")
+        new_count = await self.repo.increment_play_count(beat_id)
+        return PlayCountResponse(play_count=new_count)
 
 
 class PurchaseService:

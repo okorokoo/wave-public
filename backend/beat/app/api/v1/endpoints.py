@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, Query, Request, status, UploadFile, File
 
 from app.core.database import get_db
 from app.core.security import get_current_user_id, get_current_user_username, get_optional_user_id
-from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse, LikeToggleResponse
-from app.services.beat import BeatService, PurchaseService, VoiceTagService, LikeService
+from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse, LikeToggleResponse, PlayCountResponse
+from app.services.beat import BeatService, PurchaseService, VoiceTagService, LikeService, PlayService
 from app.services.payment import PaymentService
 
 router = APIRouter(tags=["Beats Catalog"])
@@ -140,6 +140,15 @@ async def yookassa_webhook(request: Request, db=Depends(get_db)):
 
 
 # ─── Параметрические маршруты /{beat_id} ─────────────────────────────────────
+
+@router.post("/{beat_id}/play", response_model=PlayCountResponse)
+async def record_play(
+        beat_id: uuid.UUID,
+        db=Depends(get_db)
+):
+    service = PlayService(db)
+    return await service.record_play(beat_id)
+
 
 @router.post("/{beat_id}/like", response_model=LikeToggleResponse)
 async def toggle_like(

@@ -153,6 +153,14 @@ class BeatRepo:
         await self.db.delete(beat)
         await self.db.commit()
 
+    async def increment_play_count(self, beat_id: uuid.UUID) -> int:
+        await self.db.execute(
+            update(Beat).where(Beat.id == beat_id).values(play_count=Beat.play_count + 1)
+        )
+        await self.db.commit()
+        result = await self.db.execute(select(Beat.play_count).where(Beat.id == beat_id))
+        return result.scalar_one()
+
 
 class PurchaseRepo:
     def __init__(self, db: AsyncSession):
