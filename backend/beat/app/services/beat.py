@@ -288,7 +288,8 @@ class VoiceTagService:
 
         ext = "mp3" if "mp3" in (file.content_type or "") or filename.lower().endswith(".mp3") else "wav"
         s3_key = f"voice_tags/{user_id}/voice_tag.{ext}"
-        await self.s3.upload_file(file, s3_key)
+        explicit_content_type = "audio/mpeg" if ext == "mp3" else "audio/wav"
+        await self.s3.upload_file(file, s3_key, content_type=explicit_content_type)
 
         record = await self.repo.upsert(user_id, s3_key)
         url = await self.s3.generate_presigned_url(s3_key)

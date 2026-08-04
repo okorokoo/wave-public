@@ -39,14 +39,14 @@ class S3Storage:
         async with self._get_client() as client:
             await client.head_bucket(Bucket=self.bucket_name)
 
-    async def upload_file(self, file: UploadFile, s3_path: str) -> str:
+    async def upload_file(self, file: UploadFile, s3_path: str, content_type: str | None = None) -> str:
         async with self._get_client() as client:
             file_content = await file.read()
             await client.put_object(
                 Bucket=self.bucket_name,
                 Key=s3_path,
                 Body=file_content,
-                ContentType=file.content_type
+                ContentType=content_type or file.content_type or 'application/octet-stream',
             )
         return s3_path
 
