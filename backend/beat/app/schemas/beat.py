@@ -75,6 +75,16 @@ class PaymentResultResponse(BaseModel):
     download_url: Optional[str] = None
 
 
+class PendingPaymentResponse(BaseModel):
+    payment_id: str
+    beat_id: uuid.UUID
+    beat_title: str
+    beat_cover_url: Optional[str] = None
+    beat_author_name: Optional[str] = None
+    amount: Decimal
+    created_at: datetime
+
+
 class MyPurchaseResponse(BaseModel):
     id: uuid.UUID
     license_type: str

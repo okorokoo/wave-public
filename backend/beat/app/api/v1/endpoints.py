@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, Request, status, UploadFile, File
 
 from app.core.database import get_db
 from app.core.security import get_current_user_id, get_current_user_username, get_optional_user_id
-from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse, LikeToggleResponse, PlayCountResponse
+from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse, PendingPaymentResponse, LikeToggleResponse, PlayCountResponse
 from app.services.beat import BeatService, PurchaseService, VoiceTagService, LikeService, PlayService
 from app.services.payment import PaymentService
 
@@ -118,6 +118,15 @@ async def delete_voice_tag(
     service = VoiceTagService(db)
     await service.delete(current_user_id)
     return None
+
+
+@router.get("/payment/pending", response_model=List[PendingPaymentResponse])
+async def get_pending_payments(
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = PaymentService(db)
+    return await service.get_pending_payments(current_user_id)
 
 
 @router.get("/payment/{payment_id}/result", response_model=PaymentResultResponse)

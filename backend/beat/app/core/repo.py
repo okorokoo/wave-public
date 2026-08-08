@@ -202,6 +202,16 @@ class PaymentRepo:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def get_pending_by_buyer(self, buyer_id: uuid.UUID):
+        query = (
+            select(Payment, Beat)
+            .join(Beat, Payment.beat_id == Beat.id)
+            .where(and_(Payment.buyer_id == buyer_id, Payment.status == "pending"))
+            .order_by(Payment.created_at.desc())
+        )
+        result = await self.db.execute(query)
+        return result.all()
+
     async def create(
         self,
         payment_id: str,

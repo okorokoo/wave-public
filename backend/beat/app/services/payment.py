@@ -11,7 +11,7 @@ from yookassa.domain.notification import WebhookNotificationEventType, WebhookNo
 
 from app.core.repo import BeatRepo, PurchaseRepo, PaymentRepo
 from app.core.s3 import S3Storage
-from app.schemas.beat import CheckoutResponse, PaymentResultResponse
+from app.schemas.beat import CheckoutResponse, PaymentResultResponse, PendingPaymentResponse
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -133,6 +133,29 @@ class PaymentService:
             expires_in=settings.S3_DOWNLOAD_URL_EXPIRE_SECONDS,
         )
         return PaymentResultResponse(status="succeeded", download_url=download_url)
+
+    # ── Pending payments ──────────────────────────────────────────────────────
+
+    async def get_pending_payments(self, buyer_id: uuid.UUID) -> list[PendingPaymentResponse]:
+        rows = await self.payment_repo.get_pending_by_buyer(buyer_id)
+        result = []
+        for payment, beat in rows:
+            cover_url = None
+            if beat.cover_url:
+                try:
+                    cover_url = await self.s3.generate_presigned_url(beat.cover_url)
+                except Exception:
+                    pass
+            result.append(PendingPaymentResponse(
+                payment_id=payment.id,
+                beat_id=beat.id,
+                beat_title=beat.title,
+                beat_cover_url=cover_url,
+                beat_author_name=beat.author_name,
+                amount=payment.amount,
+                created_at=payment.created_at,
+            ))
+        return result
 
     # ── Webhook ───────────────────────────────────────────────────────────────
 
