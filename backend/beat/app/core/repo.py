@@ -143,6 +143,12 @@ class BeatRepo:
         result = await self.db.execute(query)
         return result.all()
 
+    async def update_stems_url(self, beat_id: uuid.UUID, stems_key: str) -> None:
+        await self.db.execute(
+            update(Beat).where(Beat.id == beat_id).values(stems_url=stems_key)
+        )
+        await self.db.commit()
+
     async def soft_delete(self, beat: Beat) -> None:
         beat.is_deleted = True
         beat.audio_preview_url = BEAT_DELETED

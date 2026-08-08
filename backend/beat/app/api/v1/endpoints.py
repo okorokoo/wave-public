@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, Query, Request, status, UploadFile, File
 
 from app.core.database import get_db
 from app.core.security import get_current_user_id, get_current_user_username, get_optional_user_id
-from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse, PendingPaymentResponse, LikeToggleResponse, PlayCountResponse
-from app.services.beat import BeatService, PurchaseService, VoiceTagService, LikeService, PlayService
+from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse, PendingPaymentResponse, LikeToggleResponse, PlayCountResponse, StemsDownloadResponse
+from app.services.beat import BeatService, PurchaseService, VoiceTagService, LikeService, PlayService, StemsService
 from app.services.payment import PaymentService
 
 router = APIRouter(tags=["Beats Catalog"])
@@ -19,6 +19,7 @@ async def upload_new_beat(
         beat_in: BeatForm = Depends(),
         audio_full: UploadFile = File(..., description="Полная версия (WAV)"),
         cover: Optional[UploadFile] = File(None, description="Обложка бита (JPEG, PNG, WebP)"),
+        stems: Optional[UploadFile] = File(None, description="Стемы проекта (ZIP)"),
         author_id: uuid.UUID = Depends(get_current_user_id),
         author_name: str = Depends(get_current_user_username),
         db=Depends(get_db)
@@ -28,6 +29,7 @@ async def upload_new_beat(
         beat_form=beat_in,
         audio_full=audio_full,
         cover=cover,
+        stems=stems,
         author_id=author_id,
         author_name=author_name,
     )
@@ -149,6 +151,27 @@ async def yookassa_webhook(request: Request, db=Depends(get_db)):
 
 
 # ─── Параметрические маршруты /{beat_id} ─────────────────────────────────────
+
+@router.post("/{beat_id}/stems", response_model=BeatResponse)
+async def upload_beat_stems(
+        beat_id: uuid.UUID,
+        stems: UploadFile = File(..., description="Архив стемов (ZIP)"),
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = StemsService(db)
+    return await service.upload_stems(beat_id, current_user_id, stems)
+
+
+@router.get("/{beat_id}/stems/download", response_model=StemsDownloadResponse)
+async def download_beat_stems(
+        beat_id: uuid.UUID,
+        current_user_id: uuid.UUID = Depends(get_current_user_id),
+        db=Depends(get_db)
+):
+    service = StemsService(db)
+    return await service.get_stems_download_url(beat_id, current_user_id)
+
 
 @router.post("/{beat_id}/play", response_model=PlayCountResponse)
 async def record_play(

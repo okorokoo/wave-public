@@ -42,6 +42,7 @@ class BeatResponse(BaseModel):
     likes_count: int = 0
     is_liked: bool = False
     play_count: int = 0
+    has_stems: bool = False
 
     class Config:
         from_attributes = True
@@ -57,6 +58,10 @@ class PurchaseResponse(BaseModel):
 
 
 class DownloadResponse(BaseModel):
+    download_url: str
+
+
+class StemsDownloadResponse(BaseModel):
     download_url: str
 
 

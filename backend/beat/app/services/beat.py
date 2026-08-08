@@ -12,7 +12,7 @@ from app.models.models import Beat
 from app.schemas.beat import (
     BeatUpdate, BeatForm, BeatResponse, PurchaseResponse, DownloadResponse,
     MyPurchaseResponse, PaginatedBeatsResponse, MyBeatResponse, PaginatedMyBeatsResponse,
-    VoiceTagResponse, LikeToggleResponse, PlayCountResponse,
+    VoiceTagResponse, LikeToggleResponse, PlayCountResponse, StemsDownloadResponse,
 )
 from config import settings
 
@@ -29,7 +29,15 @@ ALLOWED_VOICE_TAG_CONTENT_TYPES = {
     "audio/x-wav",
     "audio/wave",
 }
-MAX_VOICE_TAG_BYTES = 10 * 1024 * 1024  # 10 MB
+ALLOWED_STEMS_CONTENT_TYPES = {
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/x-zip",
+    "application/octet-stream",
+    "application/x-compressed",
+}
+MAX_VOICE_TAG_BYTES = 10 * 1024 * 1024    # 10 MB
+MAX_STEMS_BYTES = 500 * 1024 * 1024       # 500 MB
 
 
 async def _beat_to_response(
@@ -69,6 +77,7 @@ async def _beat_to_response(
         likes_count=likes_count,
         is_liked=is_liked,
         play_count=beat.play_count,
+        has_stems=bool(beat.stems_url),
     )
 
 
@@ -91,6 +100,7 @@ class BeatService:
             author_id: uuid.UUID,
             author_name: str = "",
             cover: Optional[UploadFile] = None,
+            stems: Optional[UploadFile] = None,
     ) -> BeatResponse:
         filename = audio_full.filename or ""
         if (
@@ -128,6 +138,28 @@ class BeatService:
                 cover, f"beats/{beat_folder_id}/cover_{cover.filename}"
             )
 
+        stems_key = None
+        if stems:
+            stems_filename = stems.filename or ""
+            if (
+                stems.content_type not in ALLOWED_STEMS_CONTENT_TYPES
+                and not stems_filename.lower().endswith(".zip")
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Стемы должны быть в формате ZIP",
+                )
+            stems_content = await stems.read()
+            if len(stems_content) > MAX_STEMS_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Размер архива стемов превышает допустимый лимит (500 МБ)",
+                )
+            await stems.seek(0)
+            stems_key = await self.s3.upload_file(
+                stems, f"beats/{beat_folder_id}/stems.zip", content_type="application/zip"
+            )
+
         beat_data = {
             "title": beat_form.title,
             "bpm": beat_form.bpm,
@@ -140,6 +172,7 @@ class BeatService:
             "audio_preview_url": PREVIEW_PROCESSING,
             "audio_full_url": full_key,
             "cover_url": cover_key,
+            "stems_url": stems_key,
             "tags": beat_form.tags,
         }
 
@@ -254,6 +287,8 @@ class BeatService:
                 keys.append(beat.audio_preview_url)
             if beat.cover_url:
                 keys.append(beat.cover_url)
+            if beat.stems_url:
+                keys.append(beat.stems_url)
             await self.s3.delete_objects(keys)
             await self.repo.delete(beat)
 
@@ -339,6 +374,78 @@ class PlayService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бит не найден")
         new_count = await self.repo.increment_play_count(beat_id)
         return PlayCountResponse(play_count=new_count)
+
+
+class StemsService:
+    def __init__(self, db):
+        self.beat_repo = BeatRepo(db)
+        self.purchase_repo = PurchaseRepo(db)
+        self.s3 = S3Storage()
+
+    async def upload_stems(
+        self,
+        beat_id: uuid.UUID,
+        author_id: uuid.UUID,
+        file: UploadFile,
+    ) -> BeatResponse:
+        beat = await self.beat_repo.get_by_id(beat_id)
+        if not beat or beat.is_deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бит не найден")
+        if beat.author_id != author_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Вы не являетесь автором этого бита")
+
+        filename = file.filename or ""
+        if (
+            file.content_type not in ALLOWED_STEMS_CONTENT_TYPES
+            and not filename.lower().endswith(".zip")
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Стемы должны быть в формате ZIP",
+            )
+
+        content = await file.read()
+        if len(content) > MAX_STEMS_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Размер архива стемов превышает допустимый лимит (500 МБ)",
+            )
+        await file.seek(0)
+
+        # Кладём в ту же папку, что и остальные файлы бита
+        folder = beat.audio_full_url.rsplit("/", 1)[0]
+        stems_key = f"{folder}/stems.zip"
+        await self.s3.upload_file(file, stems_key, content_type="application/zip")
+        await self.beat_repo.update_stems_url(beat_id, stems_key)
+
+        beat.stems_url = stems_key
+        return await _beat_to_response(self.s3, beat)
+
+    async def get_stems_download_url(
+        self,
+        beat_id: uuid.UUID,
+        buyer_id: uuid.UUID,
+    ) -> StemsDownloadResponse:
+        beat = await self.beat_repo.get_by_id(beat_id)
+        if not beat or beat.is_deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бит не найден")
+        if not beat.stems_url:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Стемы для этого бита не загружены")
+
+        purchase = await self.purchase_repo.get_by_beat_and_buyer(beat_id, buyer_id)
+        if not purchase:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Вы не купили этот бит")
+        if purchase.license_type != "premium":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Стемы доступны только при покупке премиум-лицензии",
+            )
+
+        download_url = await self.s3.generate_presigned_url(
+            beat.stems_url,
+            expires_in=settings.S3_DOWNLOAD_URL_EXPIRE_SECONDS,
+        )
+        return StemsDownloadResponse(download_url=download_url)
 
 
 class PurchaseService:
