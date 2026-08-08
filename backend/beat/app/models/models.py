@@ -19,6 +19,7 @@ class Beat(Base):
 
     audio_preview_url = Column(String, nullable=False)
     audio_full_url = Column(String, nullable=False)
+    audio_mp3_url = Column(String, nullable=True)
     cover_url = Column(String, nullable=True)
 
     author_id = Column(UUID(as_uuid=True), nullable=False, index=True)
