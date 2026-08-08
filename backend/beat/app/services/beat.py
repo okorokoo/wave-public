@@ -1,17 +1,21 @@
+import asyncio
 import uuid
 from typing import Optional, List
 
 from fastapi import HTTPException, status, UploadFile
 
+from app.constants import PREVIEW_PROCESSING, BEAT_DELETED
 from app.core.broker import RabbitBroker
 from app.core.repo import BeatRepo, PurchaseRepo, UserVoiceTagRepo, LikeRepo
 from app.core.s3 import S3Storage
 from app.models.models import Beat
-from app.schemas.beat import BeatUpdate, BeatForm, BeatResponse, PurchaseResponse, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, MyBeatResponse, PaginatedMyBeatsResponse, VoiceTagResponse, LikeToggleResponse, PlayCountResponse
+from app.schemas.beat import (
+    BeatUpdate, BeatForm, BeatResponse, PurchaseResponse, DownloadResponse,
+    MyPurchaseResponse, PaginatedBeatsResponse, MyBeatResponse, PaginatedMyBeatsResponse,
+    VoiceTagResponse, LikeToggleResponse, PlayCountResponse,
+)
 from config import settings
 
-PREVIEW_PROCESSING = "processing"
-BEAT_DELETED = "deleted"
 ALLOWED_AUDIO_CONTENT_TYPES = {
     "audio/wav",
     "audio/x-wav",
@@ -28,6 +32,46 @@ ALLOWED_VOICE_TAG_CONTENT_TYPES = {
 MAX_VOICE_TAG_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
+async def _beat_to_response(
+    s3: S3Storage,
+    beat: Beat,
+    likes_count: int = 0,
+    is_liked: bool = False,
+) -> BeatResponse:
+    """Конвертирует ORM-объект Beat в BeatResponse, генерируя presigned URL параллельно."""
+    is_special = beat.audio_preview_url in (PREVIEW_PROCESSING, BEAT_DELETED)
+
+    if is_special:
+        preview_url = beat.audio_preview_url
+        cover_url = await s3.generate_presigned_url(beat.cover_url) if beat.cover_url else None
+    elif beat.cover_url:
+        preview_url, cover_url = await asyncio.gather(
+            s3.generate_presigned_url(beat.audio_preview_url),
+            s3.generate_presigned_url(beat.cover_url),
+        )
+    else:
+        preview_url = await s3.generate_presigned_url(beat.audio_preview_url)
+        cover_url = None
+
+    return BeatResponse(
+        id=beat.id,
+        title=beat.title,
+        bpm=beat.bpm,
+        key=beat.key,
+        price=beat.price,
+        genre=beat.genre,
+        primary_instrument=beat.primary_instrument,
+        audio_preview_url=preview_url,
+        cover_url=cover_url,
+        tags=[bt.tag for bt in beat.tags],
+        author_id=beat.author_id,
+        author_name=beat.author_name,
+        likes_count=likes_count,
+        is_liked=is_liked,
+        play_count=beat.play_count,
+    )
+
+
 class BeatService:
     def __init__(self, db):
         self.repo = BeatRepo(db)
@@ -38,30 +82,7 @@ class BeatService:
         self.rmq = RabbitBroker(url=settings.rabbitmq_url)
 
     async def _to_response(self, beat: Beat, likes_count: int = 0, is_liked: bool = False) -> BeatResponse:
-        if beat.audio_preview_url in (PREVIEW_PROCESSING, BEAT_DELETED):
-            preview_url = beat.audio_preview_url
-        else:
-            preview_url = await self.s3.generate_presigned_url(beat.audio_preview_url)
-
-        cover_url = await self.s3.generate_presigned_url(beat.cover_url) if beat.cover_url else None
-
-        return BeatResponse(
-            id=beat.id,
-            title=beat.title,
-            bpm=beat.bpm,
-            key=beat.key,
-            price=beat.price,
-            genre=beat.genre,
-            primary_instrument=beat.primary_instrument,
-            audio_preview_url=preview_url,
-            cover_url=cover_url,
-            tags=[bt.tag for bt in beat.tags],
-            author_id=beat.author_id,
-            author_name=beat.author_name,
-            likes_count=likes_count,
-            is_liked=is_liked,
-            play_count=beat.play_count,
-        )
+        return await _beat_to_response(self.s3, beat, likes_count, is_liked)
 
     async def upload_beat(
             self,
@@ -141,7 +162,7 @@ class BeatService:
             self,
             beat_id: uuid.UUID,
             current_user_id: uuid.UUID,
-            update_in: BeatUpdate
+            update_in: BeatUpdate,
     ) -> BeatResponse:
         beat = await self.repo.get_by_id(beat_id)
         if not beat or beat.is_deleted:
@@ -173,18 +194,21 @@ class BeatService:
             offset: int = 0,
             user_id: Optional[uuid.UUID] = None,
     ) -> PaginatedBeatsResponse:
-        total = await self.repo.count_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm, tag=tag, author_id=author_id)
-        beats = await self.repo.list_beats(search=search, genre=genre, instrument=instrument, min_bpm=min_bpm, max_bpm=max_bpm, tag=tag, author_id=author_id, limit=limit, offset=offset)
+        filter_kwargs = dict(search=search, genre=genre, instrument=instrument,
+                             min_bpm=min_bpm, max_bpm=max_bpm, tag=tag, author_id=author_id)
+
+        total = await self.repo.count_beats(**filter_kwargs)
+        beats = await self.repo.list_beats(**filter_kwargs, limit=limit, offset=offset)
 
         beat_ids = [b.id for b in beats]
         counts = await self.like_repo.get_counts(beat_ids)
         liked_set = await self.like_repo.get_liked_set(user_id, beat_ids) if user_id else set()
 
-        items = [
-            await self._to_response(b, likes_count=counts.get(b.id, 0), is_liked=b.id in liked_set)
+        items = await asyncio.gather(*[
+            self._to_response(b, likes_count=counts.get(b.id, 0), is_liked=b.id in liked_set)
             for b in beats
-        ]
-        return PaginatedBeatsResponse(items=items, total=total, limit=limit, offset=offset)
+        ])
+        return PaginatedBeatsResponse(items=list(items), total=total, limit=limit, offset=offset)
 
     async def get_my_beats(
             self,
@@ -194,11 +218,13 @@ class BeatService:
     ) -> PaginatedMyBeatsResponse:
         total = await self.repo.count_by_author(author_id)
         rows = await self.repo.list_by_author(author_id, limit=limit, offset=offset)
-        items = []
-        for beat, sales_count in rows:
+
+        async def _to_my(beat: Beat, sales_count: int) -> MyBeatResponse:
             base = await self._to_response(beat)
-            items.append(MyBeatResponse(**base.model_dump(), sales_count=sales_count))
-        return PaginatedMyBeatsResponse(items=items, total=total, limit=limit, offset=offset)
+            return MyBeatResponse(**base.model_dump(), sales_count=sales_count)
+
+        items = await asyncio.gather(*[_to_my(beat, sc) for beat, sc in rows])
+        return PaginatedMyBeatsResponse(items=list(items), total=total, limit=limit, offset=offset)
 
     async def remove_beat(self, beat_id: uuid.UUID, current_user_id: uuid.UUID) -> None:
         beat = await self.repo.get_by_id(beat_id)
@@ -214,9 +240,6 @@ class BeatService:
         has_purchases = await self.purchase_repo.exists_for_beat(beat_id)
 
         if has_purchases:
-            # Покупатели существуют — мягкое удаление.
-            # WAV-файл остаётся в S3, доступ покупателей сохраняется.
-            # Превью и обложка удаляются — они больше не нужны.
             keys_to_delete = []
             if beat.audio_preview_url and beat.audio_preview_url not in (PREVIEW_PROCESSING, BEAT_DELETED):
                 keys_to_delete.append(beat.audio_preview_url)
@@ -226,7 +249,6 @@ class BeatService:
                 await self.s3.delete_objects(keys_to_delete)
             await self.repo.soft_delete(beat)
         else:
-            # Покупок нет — жёсткое удаление, всё чистим.
             keys = [beat.audio_full_url]
             if beat.audio_preview_url and beat.audio_preview_url not in (PREVIEW_PROCESSING, BEAT_DELETED):
                 keys.append(beat.audio_preview_url)
@@ -253,13 +275,11 @@ class LikeService:
         beats = await self.like_repo.get_liked_beats(user_id)
         beat_ids = [b.id for b in beats]
         counts = await self.like_repo.get_counts(beat_ids)
-        beat_service = BeatService.__new__(BeatService)
-        beat_service.s3 = self.s3
-        items = [
-            await beat_service._to_response(b, likes_count=counts.get(b.id, 0), is_liked=True)
+        items = await asyncio.gather(*[
+            _beat_to_response(self.s3, b, likes_count=counts.get(b.id, 0), is_liked=True)
             for b in beats
-        ]
-        return PaginatedBeatsResponse(items=items, total=len(items), limit=len(items), offset=0)
+        ])
+        return PaginatedBeatsResponse(items=list(items), total=len(items), limit=len(items), offset=0)
 
 
 class VoiceTagService:
@@ -369,35 +389,22 @@ class PurchaseService:
 
     async def get_my_purchases(self, buyer_id: uuid.UUID) -> List[MyPurchaseResponse]:
         rows = await self.purchase_repo.get_by_buyer(buyer_id)
-        result = []
-        for purchase, beat in rows:
-            if beat.audio_preview_url in (PREVIEW_PROCESSING, BEAT_DELETED):
-                preview_url = beat.audio_preview_url
-            else:
-                preview_url = await self.s3.generate_presigned_url(beat.audio_preview_url)
 
-            beat_response = BeatResponse(
-                id=beat.id,
-                title=beat.title,
-                bpm=beat.bpm,
-                key=beat.key,
-                price=beat.price,
-                genre=beat.genre,
-                primary_instrument=beat.primary_instrument,
-                audio_preview_url=preview_url,
-                cover_url=await self.s3.generate_presigned_url(beat.cover_url) if beat.cover_url else None,
-                tags=[bt.tag for bt in beat.tags],
-                author_id=beat.author_id,
+        async def _to_my_purchase(purchase, beat: Beat) -> MyPurchaseResponse:
+            beat_response, download_url = await asyncio.gather(
+                _beat_to_response(self.s3, beat),
+                self.s3.generate_presigned_url(
+                    beat.audio_full_url,
+                    expires_in=settings.S3_DOWNLOAD_URL_EXPIRE_SECONDS,
+                ),
             )
-            download_url = await self.s3.generate_presigned_url(
-                beat.audio_full_url,
-                expires_in=settings.S3_DOWNLOAD_URL_EXPIRE_SECONDS,
-            )
-            result.append(MyPurchaseResponse(
+            return MyPurchaseResponse(
                 id=purchase.id,
                 license_type=purchase.license_type,
                 purchased_at=purchase.purchased_at,
                 download_url=download_url,
                 beat=beat_response,
-            ))
-        return result
+            )
+
+        result = await asyncio.gather(*[_to_my_purchase(p, b) for p, b in rows])
+        return list(result)

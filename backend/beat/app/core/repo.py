@@ -1,9 +1,10 @@
 import uuid
 from typing import Optional, Sequence, List
 
-from sqlalchemy import select, and_, func, delete, update
+from sqlalchemy import select, and_, func, delete, update, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.constants import BEAT_DELETED
 from app.models.models import Beat, Purchase, BeatTag, Payment, UserVoiceTag, BeatLike
 
 
@@ -144,9 +145,8 @@ class BeatRepo:
 
     async def soft_delete(self, beat: Beat) -> None:
         beat.is_deleted = True
-        beat.audio_preview_url = "deleted"
+        beat.audio_preview_url = BEAT_DELETED
         beat.cover_url = None
-        self.db.add(beat)
         await self.db.commit()
 
     async def delete(self, beat: Beat) -> None:
@@ -154,11 +154,13 @@ class BeatRepo:
         await self.db.commit()
 
     async def increment_play_count(self, beat_id: uuid.UUID) -> int:
-        await self.db.execute(
-            update(Beat).where(Beat.id == beat_id).values(play_count=Beat.play_count + 1)
+        result = await self.db.execute(
+            update(Beat)
+            .where(Beat.id == beat_id)
+            .values(play_count=Beat.play_count + 1)
+            .returning(Beat.play_count)
         )
         await self.db.commit()
-        result = await self.db.execute(select(Beat.play_count).where(Beat.id == beat_id))
         return result.scalar_one()
 
 

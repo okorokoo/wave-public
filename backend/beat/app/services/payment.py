@@ -96,23 +96,23 @@ class PaymentService:
 
         # Если вебхук ещё не пришёл — синхронизируем с YooKassa напрямую
         if payment.status == "pending":
+            yoo_status = None
             try:
                 _configure_yookassa()
                 yoo_payment = await asyncio.to_thread(YooPayment.find_one, payment_id)
-
-                if yoo_payment.status == "succeeded":
-                    await self._finalize_succeeded(payment_id, payment.beat_id, payment.buyer_id, payment.amount)
-                    payment.status = "succeeded"
-                elif yoo_payment.status in CANCELED_STATUSES:
-                    await self.payment_repo.update_status(payment_id, "canceled")
-                    payment.status = "canceled"
-                    logger.info("Payment %s canceled (synced from YooKassa)", payment_id)
-
-            except HTTPException:
-                raise
+                yoo_status = yoo_payment.status
             except Exception as exc:
-                # YooKassa недоступна — возвращаем текущий pending, не ломаем UX
+                # YooKassa недоступна — продолжаем с текущим статусом
                 logger.warning("YooKassa API unavailable for payment %s: %s", payment_id, exc)
+
+            # Финализация вне try — ошибки DB не глушатся как "YooKassa unavailable"
+            if yoo_status == "succeeded":
+                await self._finalize_succeeded(payment_id, payment.beat_id, payment.buyer_id, payment.amount)
+                payment.status = "succeeded"
+            elif yoo_status in CANCELED_STATUSES:
+                await self.payment_repo.update_status(payment_id, "canceled")
+                payment.status = "canceled"
+                logger.info("Payment %s canceled (synced from YooKassa)", payment_id)
 
         if payment.status == "canceled":
             raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Платёж отменён")

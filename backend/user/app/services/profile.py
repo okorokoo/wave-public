@@ -33,18 +33,20 @@ class ProfileService:
         return await self._build_profile_dict(profile, viewer_id=viewer_id)
 
     async def _build_profile_dict(self, profile: Profile, viewer_id: Optional[uuid.UUID] = None) -> dict:
-        avatar_url: Optional[str] = None
-        if profile.avatar_url:
+        async def _get_avatar() -> Optional[str]:
+            if not profile.avatar_url:
+                return None
             try:
-                avatar_url = await self._s3.generate_presigned_url(profile.avatar_url)
+                return await self._s3.generate_presigned_url(profile.avatar_url)
             except Exception:
-                avatar_url = None
+                return None
+
+        viewer_is_other = bool(viewer_id and viewer_id != profile.user_id)
+
         followers_count, following_count = await self._follow_repo.get_counts(profile.user_id)
-        is_following = (
-            await self._follow_repo.is_following(viewer_id, profile.user_id)
-            if viewer_id and viewer_id != profile.user_id
-            else False
-        )
+        is_following: bool = await self._follow_repo.is_following(viewer_id, profile.user_id) if viewer_is_other else False
+        avatar_url: Optional[str] = await _get_avatar()
+
         return {
             "user_id": profile.user_id,
             "username": profile.username,
@@ -101,7 +103,6 @@ class ProfileService:
         if not profile:
             raise HTTPException(status_code=404, detail="Профиль не найден")
 
-        # Delete old avatar only if key changed
         if profile.avatar_url and profile.avatar_url != s3_key:
             try:
                 await self._s3.delete_objects([profile.avatar_url])

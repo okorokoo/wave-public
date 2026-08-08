@@ -127,7 +127,7 @@ services:
   mailhog:
     image: mailhog/mailhog:latest
     ports:
-      - "2525:1025"   # SMTP для сервисов (хост→контейнер; 1025 зарезервирован Hyper-V)
+      - "1026:1025"   # SMTP для сервисов (хост→контейнер; 1025 зарезервирован Hyper-V)
       - "8025:8025"   # Веб-интерфейс: http://localhost:8025
 
 
