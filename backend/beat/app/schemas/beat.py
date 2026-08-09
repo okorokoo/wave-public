@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import Form
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BeatCreate(BaseModel):
@@ -44,8 +44,7 @@ class BeatResponse(BaseModel):
     play_count: int = 0
     has_stems: bool = False
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PurchaseResponse(BaseModel):

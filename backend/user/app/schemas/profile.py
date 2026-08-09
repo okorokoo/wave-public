@@ -1,7 +1,7 @@
 from typing import Optional, Dict
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 ALLOWED_SOCIAL_KEYS = {"soundcloud", "instagram", "youtube", "vk", "telegram", "twitter", "website"}
@@ -23,8 +23,7 @@ class ProfileRead(BaseModel):
     following_count: int = 0
     is_following: bool = False
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AvatarResponse(BaseModel):

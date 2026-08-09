@@ -115,7 +115,7 @@ class BeatService:
         audio_content = await audio_full.read()
         if len(audio_content) > settings.MAX_AUDIO_UPLOAD_BYTES:
             raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                 detail="Размер WAV-файла превышает допустимый лимит",
             )
         await audio_full.seek(0)
@@ -152,7 +152,7 @@ class BeatService:
             stems_content = await stems.read()
             if len(stems_content) > MAX_STEMS_BYTES:
                 raise HTTPException(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                     detail="Размер архива стемов превышает допустимый лимит (500 МБ)",
                 )
             await stems.seek(0)
@@ -336,7 +336,7 @@ class VoiceTagService:
         content = await file.read()
         if len(content) > MAX_VOICE_TAG_BYTES:
             raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                 detail="Файл войс-тега не должен превышать 10 МБ",
             )
         await file.seek(0)
@@ -407,7 +407,7 @@ class StemsService:
         content = await file.read()
         if len(content) > MAX_STEMS_BYTES:
             raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                 detail="Размер архива стемов превышает допустимый лимит (500 МБ)",
             )
         await file.seek(0)
