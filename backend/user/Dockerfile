@@ -27,6 +27,7 @@ COPY user/pyproject.toml user/poetry.lock* /user/
 # Настраиваем Poetry: не создавать venv внутри контейнера (он там не нужен)
 # И устанавливаем зависимости только для user-service
 RUN poetry config virtualenvs.create false \
+    && poetry lock \
     && poetry install --no-interaction --no-ansi --no-root
 
 # 6. Копируем остальной код сервиса

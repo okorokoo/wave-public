@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
+from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import text
 
 from app.api.v1.endpoints import router as router_v1
@@ -45,6 +46,7 @@ app = FastAPI(
 )
 
 app.include_router(router_v1)
+Instrumentator().instrument(app).expose(app)
 
 
 @app.get("/")

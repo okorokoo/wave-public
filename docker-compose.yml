@@ -25,6 +25,8 @@ services:
         condition: service_started
       rabbitmq:
         condition: service_healthy
+      promtail:
+        condition: service_healthy
 
 
   user-db:
@@ -50,6 +52,8 @@ services:
       user-db:
         condition: service_started
       rabbitmq:
+        condition: service_healthy
+      promtail:
         condition: service_healthy
 
 
@@ -92,6 +96,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      promtail:
+        condition: service_healthy
 
   beat-worker:
     build:
@@ -107,6 +113,8 @@ services:
       rabbitmq:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      promtail:
         condition: service_healthy
     volumes:
       - ./backend/beat/assets:/beat/assets
@@ -147,3 +155,73 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
+
+
+  loki:
+    image: grafana/loki:2.9.8
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+
+  promtail:
+    image: grafana/promtail:2.9.8
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      loki:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9080/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    ports:
+      - "4000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+      - loki
+    restart: unless-stopped
+
+
+volumes:
+  prometheus_data:
+  loki_data:
+  grafana_data:
