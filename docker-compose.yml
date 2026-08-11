@@ -151,7 +151,7 @@ services:
     volumes:
       - ./aws/minio_data:/data
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -189,20 +189,22 @@ services:
 
   promtail:
     image: grafana/promtail:2.9.8
+    user: root
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml
+      - promtail_positions:/var/promtail
     command: -config.file=/etc/promtail/config.yml
     depends_on:
       loki:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:9080/ready || exit 1"]
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:9080/metrics || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 15s
 
 
   grafana:
@@ -225,3 +227,4 @@ volumes:
   prometheus_data:
   loki_data:
   grafana_data:
+  promtail_positions:
