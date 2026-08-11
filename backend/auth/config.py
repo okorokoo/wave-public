@@ -1,6 +1,6 @@
 import os
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
@@ -35,6 +35,18 @@ class Settings(BaseSettings):
         return f"amqp://{self.RABBITMQ_LOGIN}:{self.RABBITMQ_PASSWORD}@rabbitmq:{self.RABBITMQ_PORT}/"
 
     DEBUG: bool = True
+
+    # Инвайт-коды (закрытая бета): если список непустой — регистрация только по коду
+    INVITE_CODES: str = ""
+
+    @field_validator("INVITE_CODES", mode="before")
+    @classmethod
+    def _parse_codes(cls, v: object) -> str:
+        return str(v) if v is not None else ""
+
+    @property
+    def invite_codes_list(self) -> list[str]:
+        return [c.strip() for c in self.INVITE_CODES.split(",") if c.strip()]
 
     # Настройки email
     SMTP_HOST: str = "mailhog"

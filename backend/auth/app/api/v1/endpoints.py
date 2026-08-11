@@ -57,6 +57,12 @@ async def register_user(
         user_in: UserRegister,
         db: AsyncSession = Depends(get_db)
 ):
+    if settings.invite_codes_list and user_in.invite_code not in settings.invite_codes_list:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Неверный код приглашения"
+        )
+
     query = select(User).where(User.email == user_in.email)
     result = await db.execute(query)
     if result.scalar_one_or_none():
