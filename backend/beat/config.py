@@ -8,7 +8,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
 
 class Settings(BaseSettings):
     # Настройки базы данных
-    USER: str
+    DB_USER: str
     PASSWORD: str
     BEAT_DB_NAME: str
     BEAT_DB_HOST: str
@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        return f"postgresql+asyncpg://{self.USER}:{self.PASSWORD}@{self.BEAT_DB_HOST}:{self.DB_PORT_INSIDE}/{self.BEAT_DB_NAME}"
+        return f"postgresql+asyncpg://{self.DB_USER}:{self.PASSWORD}@{self.BEAT_DB_HOST}:{self.DB_PORT_INSIDE}/{self.BEAT_DB_NAME}"
 
     DEBUG: bool = False
 

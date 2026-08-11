@@ -1,7 +1,7 @@
 import os
 
 # Must be set before any app imports so pydantic-settings resolves them
-os.environ.setdefault("USER", "test")
+os.environ.setdefault("DB_USER", "test")
 os.environ.setdefault("PASSWORD", "test")
 os.environ.setdefault("BEAT_DB_NAME", "test_beat")
 os.environ.setdefault("BEAT_DB_HOST", "localhost")

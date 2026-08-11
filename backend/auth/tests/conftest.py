@@ -1,7 +1,7 @@
 import os
 
 # Set required env vars before any app imports so pydantic-settings resolves them
-os.environ.setdefault("USER", "test")
+os.environ.setdefault("DB_USER", "test")
 os.environ.setdefault("PASSWORD", "test")
 os.environ.setdefault("AUTH_DB_NAME", "test_auth")
 os.environ.setdefault("AUTH_DB_HOST", "localhost")
