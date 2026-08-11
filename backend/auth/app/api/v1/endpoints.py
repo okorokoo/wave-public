@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
 from app.core.database import get_db
-from app.core.email import send_verification_email
+from app.core.email import make_verification_email
 from app.core.security import hash_password, create_refresh_token
 from app.core.security import verify_password, create_access_token
-from app.models.models import User, RefreshToken, EmailVerification, OutboxEvent
+from app.models.models import User, RefreshToken, EmailVerification, OutboxEvent, EmailOutbox
 from schemas.schemas import UserAuthRead, UserRegister, RefreshRequest, ResendVerificationRequest, ChangePasswordRequest, DeleteAccountRequest
 from config import settings
 
@@ -87,18 +87,15 @@ async def register_user(
             routing_key="user_created",
             payload={"user_id": str(new_user.id), "username": user_in.username},
         )
+        email_outbox = make_verification_email(new_user.email, verification_token)
         db.add(verification)
         db.add(outbox_event)
+        db.add(email_outbox)
         await db.commit()
         await db.refresh(new_user)
     except Exception:
         await db.rollback()
         raise HTTPException(status_code=500, detail="Ошибка при сохранении в базу")
-
-    try:
-        await send_verification_email(new_user.email, verification_token)
-    except Exception as e:
-        logger.warning("Failed to send verification email: %s", e)
 
     return new_user
 
@@ -300,12 +297,9 @@ async def resend_verification(
         user_id=user.id,
         expires_at=datetime.now(timezone.utc) + timedelta(hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS)
     )
+    email_outbox = make_verification_email(user.email, verification_token)
     db.add(verification)
+    db.add(email_outbox)
     await db.commit()
-
-    try:
-        await send_verification_email(user.email, verification_token)
-    except Exception as e:
-        logger.warning("Failed to send verification email: %s", e)
 
     return generic_response
