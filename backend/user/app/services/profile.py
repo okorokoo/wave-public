@@ -1,7 +1,10 @@
+import logging
 import uuid
 from typing import Optional
 
 from fastapi import HTTPException, UploadFile
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
@@ -66,8 +69,6 @@ class ProfileService:
 
     async def update_my_profile(self, user_id: uuid.UUID, update_schema: ProfileUpdate) -> dict:
         from sqlalchemy.exc import IntegrityError
-        from app.core.broker import RabbitBroker
-        from config import settings
 
         profile = await self._repo.get_by_user_id(user_id)
         if not profile:
@@ -90,13 +91,21 @@ class ProfileService:
 
         if username_changed:
             try:
-                broker = RabbitBroker(settings.rabbitmq_url)
-                await broker.publish("username_changed", {
-                    "user_id": str(user_id),
-                    "new_username": new_username,
-                })
-            except Exception:
-                pass  # не блокируем ответ; биты обновятся позже при повторной попытке
+                import json
+                import aio_pika
+                from config import settings as _s
+                async with await aio_pika.connect_robust(_s.rabbitmq_url) as conn:
+                    channel = await conn.channel()
+                    await channel.declare_queue("username_changed", durable=True)
+                    await channel.default_exchange.publish(
+                        aio_pika.Message(
+                            body=json.dumps({"user_id": str(user_id), "new_username": new_username}).encode(),
+                            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                        ),
+                        routing_key="username_changed",
+                    )
+            except Exception as exc:
+                logger.warning("username_changed: failed to publish event for %s: %s", user_id, exc)
 
         return await self.get_my_profile(user_id)
 
