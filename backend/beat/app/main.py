@@ -9,7 +9,7 @@ from app.core.broker import RabbitBroker
 from app.core.database import async_session
 from app.core.logger import setup_logging
 from app.core.s3 import S3Storage
-from app.events.handlers import handle_user_deleted
+from app.events.handlers import handle_user_deleted, handle_username_changed
 from config import settings
 
 setup_logging(debug=settings.DEBUG)
@@ -25,12 +25,16 @@ async def lifespan(app: FastAPI):
     await broker.connect()
     app.state.broker = broker
 
-    queue = await broker.declare_queue("user_deleted")
-    tag = await queue.consume(handle_user_deleted)
+    queue_deleted = await broker.declare_queue("user_deleted")
+    tag_deleted = await queue_deleted.consume(handle_user_deleted)
+
+    queue_username = await broker.declare_queue("username_changed")
+    tag_username = await queue_username.consume(handle_username_changed)
 
     yield
 
-    await queue.cancel(tag)
+    await queue_deleted.cancel(tag_deleted)
+    await queue_username.cancel(tag_username)
     await broker.close()
 
 

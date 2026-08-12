@@ -66,6 +66,8 @@ class ProfileService:
 
     async def update_my_profile(self, user_id: uuid.UUID, update_schema: ProfileUpdate) -> dict:
         from sqlalchemy.exc import IntegrityError
+        from app.core.broker import RabbitBroker
+        from config import settings
 
         profile = await self._repo.get_by_user_id(user_id)
         if not profile:
@@ -76,7 +78,8 @@ class ProfileService:
             return await self.get_my_profile(user_id)
 
         new_username = update_data.get("username")
-        if new_username and new_username != profile.username:
+        username_changed = new_username and new_username != profile.username
+        if username_changed:
             if not await self._repo.is_username_available(new_username):
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот псевдоним уже занят")
 
@@ -84,6 +87,16 @@ class ProfileService:
             await self._repo.update_profile(profile, update_data)
         except IntegrityError:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот псевдоним уже занят")
+
+        if username_changed:
+            try:
+                broker = RabbitBroker(settings.rabbitmq_url)
+                await broker.publish("username_changed", {
+                    "user_id": str(user_id),
+                    "new_username": new_username,
+                })
+            except Exception:
+                pass  # не блокируем ответ; биты обновятся позже при повторной попытке
 
         return await self.get_my_profile(user_id)
 
