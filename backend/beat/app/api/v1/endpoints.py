@@ -7,9 +7,9 @@ from fastapi.responses import StreamingResponse
 from app.core.database import get_db
 from app.core.security import get_current_user_id, get_current_user_username, get_optional_user_id
 from app.core.download_token import verify_download_token
-from app.core.repo import BeatRepo
+from app.core.repo import BeatRepo, PurchaseRepo
 from app.core.s3 import S3Storage
-from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse, PendingPaymentResponse, LikeToggleResponse, PlayCountResponse, StemsDownloadResponse
+from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse, PendingPaymentResponse, LikeToggleResponse, PlayCountResponse, StemsDownloadResponse, PurchaseStatusResponse
 from app.services.beat import BeatService, PurchaseService, VoiceTagService, LikeService, PlayService, StemsService
 from app.services.payment import PaymentService
 
@@ -208,6 +208,18 @@ async def stream_stems_file(
         "Cache-Control": "no-store",
     }
     return StreamingResponse(s3.stream_object(beat.stems_url), media_type="application/zip", headers=headers)
+
+
+@router.get("/{beat_id}/purchase-status", response_model=PurchaseStatusResponse)
+async def get_purchase_status(
+        beat_id: uuid.UUID,
+        user_id: Optional[uuid.UUID] = Depends(get_optional_user_id),
+        db=Depends(get_db),
+):
+    if not user_id:
+        return PurchaseStatusResponse(is_purchased=False)
+    purchase = await PurchaseRepo(db).get_by_beat_and_buyer(beat_id, user_id)
+    return PurchaseStatusResponse(is_purchased=purchase is not None)
 
 
 @router.post("/{beat_id}/stems", response_model=BeatResponse)

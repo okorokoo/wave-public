@@ -97,6 +97,10 @@ class MyPurchaseResponse(BaseModel):
     beat: BeatResponse
 
 
+class PurchaseStatusResponse(BaseModel):
+    is_purchased: bool
+
+
 class PaginatedBeatsResponse(BaseModel):
     items: List[BeatResponse]
     total: int
