@@ -57,11 +57,11 @@ class PurchaseResponse(BaseModel):
 
 
 class DownloadResponse(BaseModel):
-    download_url: str
+    stream_url: str
 
 
 class StemsDownloadResponse(BaseModel):
-    download_url: str
+    stream_url: str
 
 
 class CheckoutResponse(BaseModel):
@@ -76,7 +76,7 @@ class VoiceTagResponse(BaseModel):
 
 class PaymentResultResponse(BaseModel):
     status: str  # pending | succeeded | canceled
-    download_url: Optional[str] = None
+    stream_url: Optional[str] = None
 
 
 class PendingPaymentResponse(BaseModel):
@@ -93,7 +93,7 @@ class MyPurchaseResponse(BaseModel):
     id: uuid.UUID
     license_type: str
     purchased_at: datetime
-    download_url: str
+    stream_url: str
     beat: BeatResponse
 
 

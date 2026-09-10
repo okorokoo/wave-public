@@ -441,11 +441,9 @@ class StemsService:
                 detail="Стемы доступны только при покупке премиум-лицензии",
             )
 
-        download_url = await self.s3.generate_presigned_url(
-            beat.stems_url,
-            expires_in=settings.S3_DOWNLOAD_URL_EXPIRE_SECONDS,
-        )
-        return StemsDownloadResponse(download_url=download_url)
+        from app.core.download_token import create_download_token
+        token = create_download_token(str(beat_id), str(buyer_id), file_type="stems")
+        return StemsDownloadResponse(stream_url=f"/beats/{beat_id}/stems/stream?token={token}")
 
 
 class PurchaseService:
@@ -481,6 +479,8 @@ class PurchaseService:
         )
 
     async def get_download_url(self, beat_id: uuid.UUID, buyer_id: uuid.UUID) -> DownloadResponse:
+        from app.core.download_token import create_download_token
+
         beat = await self.beat_repo.get_by_id(beat_id)
         if not beat:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бит не найден")
@@ -488,28 +488,22 @@ class PurchaseService:
         if not await self.purchase_repo.get_by_beat_and_buyer(beat_id, buyer_id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Вы не купили этот бит")
 
-        download_url = await self.s3.generate_presigned_url(
-            beat.audio_full_url,
-            expires_in=settings.S3_DOWNLOAD_URL_EXPIRE_SECONDS,
-        )
-        return DownloadResponse(download_url=download_url)
+        token = create_download_token(str(beat_id), str(buyer_id))
+        return DownloadResponse(stream_url=f"/beats/{beat_id}/stream?token={token}")
 
     async def get_my_purchases(self, buyer_id: uuid.UUID) -> List[MyPurchaseResponse]:
+        from app.core.download_token import create_download_token
+
         rows = await self.purchase_repo.get_by_buyer(buyer_id)
 
         async def _to_my_purchase(purchase, beat: Beat) -> MyPurchaseResponse:
-            beat_response, download_url = await asyncio.gather(
-                _beat_to_response(self.s3, beat),
-                self.s3.generate_presigned_url(
-                    beat.audio_full_url,
-                    expires_in=settings.S3_DOWNLOAD_URL_EXPIRE_SECONDS,
-                ),
-            )
+            beat_response = await _beat_to_response(self.s3, beat)
+            token = create_download_token(str(beat.id), str(buyer_id))
             return MyPurchaseResponse(
                 id=purchase.id,
                 license_type=purchase.license_type,
                 purchased_at=purchase.purchased_at,
-                download_url=download_url,
+                stream_url=f"/beats/{beat.id}/stream?token={token}",
                 beat=beat_response,
             )
 

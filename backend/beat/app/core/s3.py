@@ -69,6 +69,24 @@ class S3Storage:
             url = url.replace(self.endpoint_url, settings.S3_PUBLIC_ENDPOINT_URL, 1)
         return url
 
+    async def get_object_info(self, url_or_key: str) -> dict:
+        key = self._normalize_key(url_or_key)
+        async with self._get_client() as client:
+            return await client.head_object(Bucket=self.bucket_name, Key=key)
+
+    async def stream_object(self, url_or_key: str):
+        key = self._normalize_key(url_or_key)
+        async with self.session.client(
+            "s3",
+            endpoint_url=self.endpoint_url,
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
+        ) as client:
+            response = await client.get_object(Bucket=self.bucket_name, Key=key)
+            async with response["Body"] as stream:
+                async for chunk in stream.iter_chunks(chunk_size=65536):
+                    yield chunk
+
     async def delete_objects(self, keys: list[str]) -> None:
         normalized_keys = [
             self._normalize_key(key)

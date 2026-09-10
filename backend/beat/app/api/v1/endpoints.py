@@ -2,9 +2,13 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, Request, status, UploadFile, File
+from fastapi.responses import StreamingResponse
 
 from app.core.database import get_db
 from app.core.security import get_current_user_id, get_current_user_username, get_optional_user_id
+from app.core.download_token import verify_download_token
+from app.core.repo import BeatRepo
+from app.core.s3 import S3Storage
 from app.schemas.beat import BeatResponse, BeatUpdate, BeatForm, DownloadResponse, MyPurchaseResponse, PaginatedBeatsResponse, PaginatedMyBeatsResponse, CheckoutResponse, VoiceTagResponse, PaymentResultResponse, PendingPaymentResponse, LikeToggleResponse, PlayCountResponse, StemsDownloadResponse
 from app.services.beat import BeatService, PurchaseService, VoiceTagService, LikeService, PlayService, StemsService
 from app.services.payment import PaymentService
@@ -151,6 +155,60 @@ async def yookassa_webhook(request: Request, db=Depends(get_db)):
 
 
 # ─── Параметрические маршруты /{beat_id} ─────────────────────────────────────
+
+@router.get("/{beat_id}/stream")
+async def stream_beat_file(
+        beat_id: uuid.UUID,
+        token: str = Query(...),
+        db=Depends(get_db),
+):
+    payload = verify_download_token(token)
+    if str(beat_id) != payload["beat_id"]:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Токен не соответствует биту")
+
+    beat = await BeatRepo(db).get_by_id(beat_id)
+    if not beat or beat.is_deleted:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бит не найден")
+
+    s3 = S3Storage()
+    info = await s3.get_object_info(beat.audio_full_url)
+    safe_title = beat.title.replace('"', '\\"')
+    headers = {
+        "Content-Disposition": f'attachment; filename="{safe_title}.wav"',
+        "Content-Length": str(info["ContentLength"]),
+        "Cache-Control": "no-store",
+    }
+    return StreamingResponse(s3.stream_object(beat.audio_full_url), media_type="audio/wav", headers=headers)
+
+
+@router.get("/{beat_id}/stems/stream")
+async def stream_stems_file(
+        beat_id: uuid.UUID,
+        token: str = Query(...),
+        db=Depends(get_db),
+):
+    payload = verify_download_token(token)
+    if str(beat_id) != payload["beat_id"] or payload.get("file") != "stems":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Токен не соответствует файлу")
+
+    beat = await BeatRepo(db).get_by_id(beat_id)
+    if not beat or not beat.stems_url:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Стемы не найдены")
+
+    s3 = S3Storage()
+    info = await s3.get_object_info(beat.stems_url)
+    safe_title = beat.title.replace('"', '\\"')
+    headers = {
+        "Content-Disposition": f'attachment; filename="{safe_title}_stems.zip"',
+        "Content-Length": str(info["ContentLength"]),
+        "Cache-Control": "no-store",
+    }
+    return StreamingResponse(s3.stream_object(beat.stems_url), media_type="application/zip", headers=headers)
+
 
 @router.post("/{beat_id}/stems", response_model=BeatResponse)
 async def upload_beat_stems(

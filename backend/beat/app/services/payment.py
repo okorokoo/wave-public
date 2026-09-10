@@ -128,11 +128,9 @@ class PaymentService:
                 detail="Бит был удалён после оплаты. Обратитесь в поддержку.",
             )
 
-        download_url = await self.s3.generate_presigned_url(
-            beat.audio_full_url,
-            expires_in=settings.S3_DOWNLOAD_URL_EXPIRE_SECONDS,
-        )
-        return PaymentResultResponse(status="succeeded", download_url=download_url)
+        from app.core.download_token import create_download_token
+        token = create_download_token(str(payment.beat_id), str(buyer_id))
+        return PaymentResultResponse(status="succeeded", stream_url=f"/beats/{payment.beat_id}/stream?token={token}")
 
     # ── Pending payments ──────────────────────────────────────────────────────
 
