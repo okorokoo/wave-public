@@ -14,6 +14,7 @@ class BeatCreate(BaseModel):
     price: Decimal = Field(..., ge=0, decimal_places=2)
     genre: Optional[str] = Field(None, min_length=1, max_length=100)
     primary_instrument: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
 
 
 class BeatUpdate(BaseModel):
@@ -23,6 +24,7 @@ class BeatUpdate(BaseModel):
     price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
     genre: Optional[str] = Field(None, min_length=1, max_length=100)
     primary_instrument: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
     tags: Optional[List[str]] = None
 
 
@@ -39,6 +41,7 @@ class BeatResponse(BaseModel):
     tags: List[str] = []
     author_id: uuid.UUID
     author_name: Optional[str] = None
+    description: Optional[str] = None
     likes_count: int = 0
     is_liked: bool = False
     play_count: int = 0
@@ -139,6 +142,7 @@ class BeatForm:
         primary_instrument: Optional[str] = Form(None),
         tags: List[str] = Form(default=[]),
         artist_name: Optional[str] = Form(None, max_length=60),
+        description: Optional[str] = Form(None, max_length=500),
     ):
         self.title = title
         self.bpm = bpm
@@ -148,3 +152,4 @@ class BeatForm:
         self.primary_instrument = primary_instrument
         self.tags = tags
         self.artist_name = artist_name
+        self.description = description
