@@ -79,7 +79,8 @@ class VoiceTagResponse(BaseModel):
 
 class PaymentResultResponse(BaseModel):
     status: str  # pending | succeeded | canceled
-    stream_url: Optional[str] = None
+    beat_id: Optional[str] = None
+    beat_title: Optional[str] = None
 
 
 class PendingPaymentResponse(BaseModel):

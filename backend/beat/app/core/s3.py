@@ -59,14 +59,18 @@ class S3Storage:
     async def generate_presigned_url(self, s3_key: str, expires_in: int | None = None) -> str:
         key = self._normalize_key(s3_key)
         ttl = expires_in or settings.S3_PRESIGNED_URL_EXPIRE_SECONDS
-        async with self._get_client() as client:
+        # Sign with the public endpoint so Host header matches when MinIO validates the signature
+        async with self.session.client(
+            "s3",
+            endpoint_url=settings.S3_PUBLIC_ENDPOINT_URL,
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
+        ) as client:
             url = await client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": self.bucket_name, "Key": key},
                 ExpiresIn=ttl,
             )
-        if settings.S3_PUBLIC_ENDPOINT_URL != self.endpoint_url:
-            url = url.replace(self.endpoint_url, settings.S3_PUBLIC_ENDPOINT_URL, 1)
         return url
 
     async def get_object_info(self, url_or_key: str) -> dict:
@@ -84,7 +88,7 @@ class S3Storage:
         ) as client:
             response = await client.get_object(Bucket=self.bucket_name, Key=key)
             async with response["Body"] as stream:
-                async for chunk in stream.iter_chunks(chunk_size=65536):
+                async for chunk in stream.content.iter_chunked(65536):
                     yield chunk
 
     async def delete_objects(self, keys: list[str]) -> None:

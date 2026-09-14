@@ -2,6 +2,7 @@
 *idea*
 .env
 /aws/minio_data
+/cloudflared
 
 # Frontend
 frontend/node_modules/

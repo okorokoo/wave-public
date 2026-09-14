@@ -140,6 +140,7 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadminpassword
+      MINIO_SERVER_URL: ${S3_PUBLIC_ENDPOINT_URL}
     volumes:
       - ./aws/minio_data:/data
     healthcheck:
@@ -147,6 +148,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    restart: unless-stopped
+    volumes:
+      - ./cloudflared:/etc/cloudflared
+    depends_on:
+      - nginx
+      - minio
 
 
   prometheus:

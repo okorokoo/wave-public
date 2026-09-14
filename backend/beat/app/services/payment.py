@@ -120,7 +120,7 @@ class PaymentService:
         if payment.status == "pending":
             return PaymentResultResponse(status="pending")
 
-        # succeeded — выдаём ссылку на скачивание
+        # succeeded — возвращаем beat_id, фронт сам запросит свежий токен при скачивании
         beat = await self.beat_repo.get_by_id(payment.beat_id)
         if not beat:
             raise HTTPException(
@@ -128,9 +128,11 @@ class PaymentService:
                 detail="Бит был удалён после оплаты. Обратитесь в поддержку.",
             )
 
-        from app.core.download_token import create_download_token
-        token = create_download_token(str(payment.beat_id), str(buyer_id))
-        return PaymentResultResponse(status="succeeded", stream_url=f"/beats/{payment.beat_id}/stream?token={token}")
+        return PaymentResultResponse(
+            status="succeeded",
+            beat_id=str(payment.beat_id),
+            beat_title=beat.title,
+        )
 
     # ── Pending payments ──────────────────────────────────────────────────────
 
