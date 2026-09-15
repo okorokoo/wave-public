@@ -152,7 +152,7 @@ services:
 
   cloudflared:
     image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate --protocol http2 --edge-ip-version 4 --config /etc/cloudflared/config.yml run
+    command: tunnel --no-autoupdate --protocol http2 --edge-ip-version 4 --region us --config /etc/cloudflared/config.yml run
     restart: unless-stopped
     volumes:
       - ./cloudflared:/etc/cloudflared
