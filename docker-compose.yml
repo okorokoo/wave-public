@@ -150,17 +150,6 @@ services:
       retries: 5
 
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate --protocol http2 --edge-ip-version 4 --region us --config /etc/cloudflared/config.yml run
-    restart: unless-stopped
-    volumes:
-      - ./cloudflared:/etc/cloudflared
-    depends_on:
-      - nginx
-      - minio
-
-
   prometheus:
     image: prom/prometheus:v2.54.1
     ports:

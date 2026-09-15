@@ -1,0 +1,15 @@
+# Разворачивается на VPS в /etc/cloudflared/config.yml
+# TUNNEL_ID и путь к credentials-file — из вывода `cloudflared tunnel create wave-prod`
+# (тот же туннель, что был создан раньше; пересоздавать не нужно)
+
+tunnel: <TUNNEL_ID>
+credentials-file: /etc/cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  # nginx с Pi приходит через SSH reverse-tunnel на localhost:18080 (VPS)
+  - hostname: wavebeats.ru
+    service: http://localhost:18080
+  # minio с Pi приходит через SSH reverse-tunnel на localhost:19000 (VPS)
+  - hostname: cdn.wavebeats.ru
+    service: http://localhost:19000
+  - service: http_status:404

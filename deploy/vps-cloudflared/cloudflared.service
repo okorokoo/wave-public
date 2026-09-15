@@ -1,0 +1,17 @@
+# Разворачивается на VPS в /etc/systemd/system/cloudflared.service
+# Устанавливает и запускает cloudflared как нативный бинарник (без Docker)
+
+[Unit]
+Description=Cloudflare Tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cloudflared tunnel --no-autoupdate --protocol http2 --config /etc/cloudflared/config.yml run
+Restart=always
+RestartSec=5
+User=cloudflared
+
+[Install]
+WantedBy=multi-user.target
