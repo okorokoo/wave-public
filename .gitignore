@@ -3,6 +3,7 @@
 .env
 /aws/minio_data
 /cloudflared
+/deploy/wireguard/*.conf
 
 # Frontend
 frontend/node_modules/

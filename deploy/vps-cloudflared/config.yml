@@ -6,10 +6,9 @@ tunnel: <TUNNEL_ID>
 credentials-file: /etc/cloudflared/<TUNNEL_ID>.json
 
 ingress:
-  # nginx с Pi приходит через SSH reverse-tunnel на localhost:18080 (VPS)
+  # Pi доступен напрямую по WireGuard-адресу (10.10.0.2), без SSH-релея
   - hostname: wavebeats.ru
-    service: http://localhost:18080
-  # minio с Pi приходит через SSH reverse-tunnel на localhost:19000 (VPS)
+    service: http://10.10.0.2:80
   - hostname: cdn.wavebeats.ru
-    service: http://localhost:19000
+    service: http://10.10.0.2:9000
   - service: http_status:404
