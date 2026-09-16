@@ -137,21 +137,23 @@ class TestGetPaymentResult:
             result = await svc.get_payment_result(payment.id, buyer_id)
 
         assert result.status == "pending"
-        assert result.download_url is None
+        assert result.beat_id is None
 
-    async def test_succeeded_payment_returns_download_url(self):
+    async def test_succeeded_payment_returns_beat_info(self):
+        # Ссылку на скачивание PaymentResultResponse больше не содержит — фронт
+        # запрашивает свежий stream-токен отдельно через GET /beats/{id}/download.
         svc = _make_service()
         buyer_id = uuid.uuid4()
         beat = _make_beat()
         payment = _make_payment(buyer_id=buyer_id, status="succeeded", beat_id=beat.id)
         svc.payment_repo.get_by_id.return_value = payment
         svc.beat_repo.get_by_id.return_value = beat
-        svc.s3.generate_presigned_url.return_value = "https://s3.example.com/download"
 
         result = await svc.get_payment_result(payment.id, buyer_id)
 
         assert result.status == "succeeded"
-        assert result.download_url == "https://s3.example.com/download"
+        assert result.beat_id == str(beat.id)
+        assert result.beat_title == beat.title
 
     async def test_succeeded_but_beat_deleted_raises_404(self):
         svc = _make_service()

@@ -23,6 +23,7 @@ def _make_beat(author_id=None, is_deleted=False, has_stems=False):
     beat.price = Decimal("990.00")
     beat.genre = "Trap"
     beat.primary_instrument = None
+    beat.description = None
     beat.tags = []
     beat.play_count = 0
     beat.author_name = "Test Author"
@@ -188,16 +189,21 @@ class TestGetStemsDownloadUrl:
         assert exc.value.status_code == 403
         assert "премиум" in exc.value.detail
 
-    async def test_premium_license_returns_download_url(self):
+    async def test_premium_license_returns_stream_url(self):
+        # Стемы больше не отдаются presigned S3-ссылкой — beat-service стримит их сам
+        # по JWT download-токену (см. app/core/download_token.py).
         svc = _make_service()
         beat = _make_beat(has_stems=True)
+        buyer_id = uuid.uuid4()
         svc.beat_repo.get_by_id.return_value = beat
         svc.purchase_repo.get_by_beat_and_buyer.return_value = _make_purchase(license_type="premium")
-        svc.s3.generate_presigned_url.return_value = "https://s3.example.com/stems.zip"
 
-        result = await svc.get_stems_download_url(beat.id, uuid.uuid4())
+        result = await svc.get_stems_download_url(beat.id, buyer_id)
 
-        assert result.download_url == "https://s3.example.com/stems.zip"
-        svc.s3.generate_presigned_url.assert_called_once_with(
-            beat.stems_url, expires_in=pytest.approx(3600, abs=1)
-        )
+        assert result.stream_url.startswith(f"/beats/{beat.id}/stems/stream?token=")
+        token = result.stream_url.rsplit("token=", 1)[1]
+        from app.core.download_token import verify_download_token
+        payload = verify_download_token(token)
+        assert payload["beat_id"] == str(beat.id)
+        assert payload["buyer_id"] == str(buyer_id)
+        assert payload["file"] == "stems"
