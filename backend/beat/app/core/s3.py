@@ -1,3 +1,4 @@
+import json
 import logging
 from contextlib import asynccontextmanager
 
@@ -39,16 +40,48 @@ class S3Storage:
         async with self._get_client() as client:
             await client.head_bucket(Bucket=self.bucket_name)
 
-    async def upload_file(self, file: UploadFile, s3_path: str, content_type: str | None = None) -> str:
+    async def upload_file(
+            self,
+            file: UploadFile,
+            s3_path: str,
+            content_type: str | None = None,
+            cache_control: str | None = None,
+    ) -> str:
         async with self._get_client() as client:
             file_content = await file.read()
+            extra = {"CacheControl": cache_control} if cache_control else {}
             await client.put_object(
                 Bucket=self.bucket_name,
                 Key=s3_path,
                 Body=file_content,
                 ContentType=content_type or file.content_type or 'application/octet-stream',
+                **extra,
             )
         return s3_path
+
+    async def set_public_read_policy(self, prefixes: list[str]) -> None:
+        """Разрешает анонимное чтение объектов под заданными префиксами (glob-паттерны).
+
+        Используется для публичного контента (обложки, превью), который отдаётся
+        по стабильному URL без подписи — чтобы его мог кэшировать браузер и Cloudflare.
+        """
+        policy = {
+            "Version": "2012-10-17",
+            "Statement": [{
+                "Effect": "Allow",
+                "Principal": "*",
+                "Action": ["s3:GetObject"],
+                "Resource": [f"arn:aws:s3:::{self.bucket_name}/{prefix}" for prefix in prefixes],
+            }],
+        }
+        async with self._get_client() as client:
+            await client.put_bucket_policy(Bucket=self.bucket_name, Policy=json.dumps(policy))
+
+    def get_public_url(self, s3_key: str) -> str:
+        """Стабильный (неподписанный) URL для публичного контента — не меняется между запросами,
+        поэтому кэшируется браузером и Cloudflare. Требует set_public_read_policy на нужном префиксе."""
+        key = self._normalize_key(s3_key)
+        return f"{settings.S3_PUBLIC_ENDPOINT_URL}/{self.bucket_name}/{key}"
 
     def _normalize_key(self, url_or_key: str) -> str:
         prefix = f"{self.endpoint_url}/{self.bucket_name}/"

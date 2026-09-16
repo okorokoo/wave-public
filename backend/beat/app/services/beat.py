@@ -46,20 +46,15 @@ async def _beat_to_response(
     likes_count: int = 0,
     is_liked: bool = False,
 ) -> BeatResponse:
-    """Конвертирует ORM-объект Beat в BeatResponse, генерируя presigned URL параллельно."""
+    """Конвертирует ORM-объект Beat в BeatResponse.
+
+    Обложка и превью — публичный контент, отдаются по стабильному (неподписанному) URL,
+    чтобы их мог закэшировать браузер и Cloudflare между запросами (см. set_public_read_policy).
+    """
     is_special = beat.audio_preview_url in (PREVIEW_PROCESSING, BEAT_DELETED)
 
-    if is_special:
-        preview_url = beat.audio_preview_url
-        cover_url = await s3.generate_presigned_url(beat.cover_url) if beat.cover_url else None
-    elif beat.cover_url:
-        preview_url, cover_url = await asyncio.gather(
-            s3.generate_presigned_url(beat.audio_preview_url),
-            s3.generate_presigned_url(beat.cover_url),
-        )
-    else:
-        preview_url = await s3.generate_presigned_url(beat.audio_preview_url)
-        cover_url = None
+    preview_url = beat.audio_preview_url if is_special else s3.get_public_url(beat.audio_preview_url)
+    cover_url = s3.get_public_url(beat.cover_url) if beat.cover_url else None
 
     return BeatResponse(
         id=beat.id,
@@ -136,7 +131,8 @@ class BeatService:
                     detail="Обложка должна быть в формате JPEG, PNG или WebP",
                 )
             cover_key = await self.s3.upload_file(
-                cover, f"beats/{beat_folder_id}/cover_{cover.filename}"
+                cover, f"beats/{beat_folder_id}/cover_{cover.filename}",
+                cache_control="public, max-age=31536000, immutable",
             )
 
         stems_key = None

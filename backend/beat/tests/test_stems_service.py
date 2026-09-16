@@ -103,7 +103,7 @@ class TestUploadStems:
         svc.beat_repo.get_by_id.return_value = beat
         svc.beat_repo.update_stems_url = AsyncMock()
         svc.s3.upload_file.return_value = "beats/abc123/stems.zip"
-        svc.s3.generate_presigned_url.return_value = "https://example.com/preview.mp3"
+        svc.s3.get_public_url = MagicMock(return_value="https://example.com/preview.mp3")
 
         # octet-stream + .zip extension should be accepted
         file = _make_upload_file(content_type="application/octet-stream", filename="my_stems.zip")
@@ -136,7 +136,7 @@ class TestUploadStems:
         svc.beat_repo.get_by_id.return_value = beat
         svc.beat_repo.update_stems_url = AsyncMock()
         svc.s3.upload_file.return_value = "beats/abc123/stems.zip"
-        svc.s3.generate_presigned_url.return_value = "https://example.com/preview.mp3"
+        svc.s3.get_public_url = MagicMock(return_value="https://example.com/preview.mp3")
 
         result = await svc.upload_stems(beat.id, author_id, _make_upload_file())
 

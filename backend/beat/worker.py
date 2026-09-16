@@ -80,9 +80,10 @@ async def _run_ffmpeg(cmd: list[str]) -> None:
         raise RuntimeError(f"FFmpeg error: {result.stderr.decode('utf-8', errors='replace')}")
 
 
-async def _put_object(client, bucket: str, key: str, path: str) -> None:
+async def _put_object(client, bucket: str, key: str, path: str, cache_control: str | None = None) -> None:
     with open(path, "rb") as f:
-        await client.put_object(Bucket=bucket, Key=key, Body=f.read(), ContentType="audio/mpeg")
+        extra = {"CacheControl": cache_control} if cache_control else {}
+        await client.put_object(Bucket=bucket, Key=key, Body=f.read(), ContentType="audio/mpeg", **extra)
 
 
 async def process_audio(task_data: dict) -> None:
@@ -126,7 +127,10 @@ async def process_audio(task_data: dict) -> None:
 
         async with s3._get_client() as client:
             await asyncio.gather(
-                _put_object(client, s3.bucket_name, preview_key, local_preview),
+                _put_object(
+                    client, s3.bucket_name, preview_key, local_preview,
+                    cache_control="public, max-age=31536000, immutable",
+                ),
                 _put_object(client, s3.bucket_name, mp3_key, local_mp3),
             )
         uploaded_keys.extend([preview_key, mp3_key])

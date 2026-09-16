@@ -20,6 +20,7 @@ s3_storage = S3Storage()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await s3_storage.create_bucket_if_not_exists()
+    await s3_storage.set_public_read_policy(["beats/*/cover_*", "beats/*/preview_*"])
 
     broker = RabbitBroker(settings.rabbitmq_url)
     await broker.connect()

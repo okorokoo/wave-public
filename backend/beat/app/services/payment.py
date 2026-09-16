@@ -140,12 +140,7 @@ class PaymentService:
         rows = await self.payment_repo.get_pending_by_buyer(buyer_id)
         result = []
         for payment, beat in rows:
-            cover_url = None
-            if beat.cover_url:
-                try:
-                    cover_url = await self.s3.generate_presigned_url(beat.cover_url)
-                except Exception:
-                    pass
+            cover_url = self.s3.get_public_url(beat.cover_url) if beat.cover_url else None
             result.append(PendingPaymentResponse(
                 payment_id=payment.id,
                 beat_id=beat.id,
