@@ -132,7 +132,9 @@ class BeatService:
                 )
             cover_key = await self.s3.upload_file(
                 cover, f"beats/{beat_folder_id}/cover_{cover.filename}",
-                cache_control="public, max-age=31536000, immutable",
+                # Не immutable и не год: удалённая/жалобная обложка должна сама пропасть
+                # из кэша браузера и Cloudflare за разумный срок, без ручного purge.
+                cache_control="public, max-age=86400",
             )
 
         stems_key = None
