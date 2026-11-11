@@ -1,222 +1,244 @@
-version: '3.8'
+# Локальный запуск всего проекта:   docker compose up --build
+# С мониторингом (Prometheus/Loki/Grafana): docker compose --profile monitoring up --build
+#
+# Все значения ниже — безопасные дефолты для разработки. Для своих значений
+# скопируйте .env.example в .env: compose подхватит его автоматически.
+
+name: wave
+
+x-postgres-env: &postgres-env
+  DB_USER: ${DB_USER:-wave}
+  PASSWORD: ${PASSWORD:-wave}
+  DB_PORT_INSIDE: 5432
+
+x-rabbitmq-env: &rabbitmq-env
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: 5672
+  RABBITMQ_LOGIN: ${RABBITMQ_LOGIN:-wave}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-wave}
+
+x-common-env: &common-env
+  DEBUG: ${DEBUG:-true}
+  SECRET_KEY: ${SECRET_KEY:-dev-only-secret-key-change-me-in-production}
+  ALGORITHM: ${ALGORITHM:-HS256}
+
+x-s3-env: &s3-env
+  S3_ENDPOINT_URL: http://minio:9000
+  S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9000}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-wave-minio}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-wave-minio-secret}
+  S3_BUCKET_NAME: ${S3_BUCKET_NAME:-wave-beats}
+
+x-beat-env: &beat-env
+  <<: [*postgres-env, *rabbitmq-env, *common-env, *s3-env]
+  BEAT_DB_HOST: postgres
+  BEAT_DB_NAME: beat_db
+  YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+  YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
+  YOOKASSA_RETURN_URL: ${YOOKASSA_RETURN_URL:-http://localhost/payment/success}
+
+x-backend-depends: &backend-depends
+  postgres:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_healthy
 
 services:
-  auth-db:
-    image: postgres:17-alpine
-    env_file:
-      - .env
-    environment:
-      POSTGRES_DB: ${AUTH_DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${PASSWORD}
-    ports:
-      - "${AUTH_DB_PORT_OUTSIDE}:${DB_PORT_INSIDE}"
+  # --- Инфраструктура -------------------------------------------------------
 
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-wave}
+      POSTGRES_PASSWORD: ${PASSWORD:-wave}
+      # Database-per-service: каждая служба владеет своей базой
+      POSTGRES_MULTIPLE_DATABASES: auth_db,user_db,beat_db
+    volumes:
+      - ./deploy/postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_LOGIN:-wave}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-wave}
+    ports:
+      - "15672:15672"  # веб-интерфейс управления
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    # Официальные образы MinIO больше не публикуются — community-сборка того же MinIO
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-wave-minio}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-wave-minio-secret}
+      MINIO_SERVER_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9000}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"  # S3 API (presigned-ссылки открываются браузером напрямую)
+      - "9001:9001"  # веб-консоль
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "8025:8025"  # веб-интерфейс с перехваченными письмами
+
+  # --- Приложение ------------------------------------------------------------
 
   auth-service:
     build:
       context: ./backend
       dockerfile: auth/Dockerfile
-    env_file:
-      - .env
-    restart: unless-stopped
-    depends_on:
-      auth-db:
-        condition: service_started
-      rabbitmq:
-        condition: service_healthy
-
-
-  user-db:
-    image: postgres:17-alpine
-    env_file:
-      - .env
     environment:
-      POSTGRES_DB: ${USER_DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${PASSWORD}
-    ports:
-      - "${USER_DB_PORT_OUTSIDE}:${DB_PORT_INSIDE}"
-
+      <<: [*postgres-env, *rabbitmq-env, *common-env]
+      AUTH_DB_HOST: postgres
+      AUTH_DB_NAME: auth_db
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      INVITE_CODES: ${INVITE_CODES:-}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@wave.local}
+      BASE_URL: ${BASE_URL:-http://localhost}
+    depends_on: *backend-depends
+    restart: unless-stopped
 
   user-service:
     build:
       context: ./backend
       dockerfile: user/Dockerfile
-    env_file:
-      - .env
-    restart: unless-stopped
-    depends_on:
-      user-db:
-        condition: service_started
-      rabbitmq:
-        condition: service_healthy
-
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - "${RABBITMQ_PORT}:${RABBITMQ_PORT}"   # Порт для протокола AMQP
-      - "${RABBITMQ_PORT_ADMIN}:${RABBITMQ_PORT_ADMIN}" # Порт для веб-интерфейса управления (логин/пароль: guest/guest)
-    healthcheck:
-      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    env_file:
-      - .env
-
-  beat-db:
-    image: postgres:17-alpine
-    env_file:
-      - .env
     environment:
-      POSTGRES_DB: ${BEAT_DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${PASSWORD}
-    ports:
-      - "${BEAT_DB_PORT_OUTSIDE}:${DB_PORT_INSIDE}"
-
+      <<: [*postgres-env, *rabbitmq-env, *common-env, *s3-env]
+      USER_DB_HOST: postgres
+      USER_DB_NAME: user_db
+    depends_on:
+      <<: *backend-depends
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
 
   beat-service:
     build:
       context: ./backend
       dockerfile: beat/Dockerfile
-    env_file:
-      - .env
-    restart: unless-stopped
+    environment: *beat-env
     depends_on:
-      beat-db:
-        condition: service_started
-      rabbitmq:
-        condition: service_healthy
+      <<: *backend-depends
       minio:
         condition: service_healthy
+    restart: unless-stopped
 
   beat-worker:
     build:
       context: ./backend
       dockerfile: beat/Dockerfile
-    command: python worker.py
-    env_file:
-      - .env
-    restart: unless-stopped
+    command: ["python", "worker.py"]
+    environment: *beat-env
     depends_on:
-      beat-db:
-        condition: service_started
-      rabbitmq:
-        condition: service_healthy
+      <<: *backend-depends
       minio:
         condition: service_healthy
-    volumes:
-      - ./backend/beat/assets:/beat/assets
+      # миграции beat_db накатывает beat-service
+      beat-service:
+        condition: service_started
+    restart: unless-stopped
 
-
+  # API-gateway + собранный фронтенд
   nginx:
     build:
       context: .
       dockerfile: nginx/Dockerfile
     ports:
-      - "80:80"
+      - "${HTTP_PORT:-80}:80"
     depends_on:
       - auth-service
       - user-service
       - beat-service
+    restart: unless-stopped
 
-
-  mailhog:
-    image: axllent/mailpit:latest
-    ports:
-      - "1026:1025"   # SMTP для сервисов (хост→контейнер; 1025 зарезервирован Hyper-V)
-      - "8025:8025"   # Веб-интерфейс: http://localhost:8025
-
-
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000" # Порт для кода (API)
-      - "9001:9001" # Порт для тебя (Браузер / Консоль)
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadminpassword
-      MINIO_SERVER_URL: ${S3_PUBLIC_ENDPOINT_URL}
-    volumes:
-      - ./aws/minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
+  # --- Мониторинг (опционально: --profile monitoring) -------------------------
 
   prometheus:
     image: prom/prometheus:v2.54.1
+    profiles: ["monitoring"]
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
     restart: unless-stopped
-
 
   loki:
     image: grafana/loki:2.9.8
+    profiles: ["monitoring"]
     ports:
       - "3100:3100"
     volumes:
-      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml
+      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
       - loki_data:/loki
     command: -config.file=/etc/loki/local-config.yaml
-    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 20s
-
+    restart: unless-stopped
 
   promtail:
     image: grafana/promtail:2.9.8
+    profiles: ["monitoring"]
     user: root
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
       - promtail_positions:/var/promtail
     command: -config.file=/etc/promtail/config.yml
     depends_on:
       loki:
         condition: service_healthy
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:9080/metrics || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
-
 
   grafana:
     image: grafana/grafana:11.3.0
+    profiles: ["monitoring"]
     ports:
       - "4000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
       - loki
     restart: unless-stopped
 
-
 volumes:
+  postgres_data:
+  minio_data:
   prometheus_data:
   loki_data:
   grafana_data:

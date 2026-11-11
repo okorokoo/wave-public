@@ -1,13 +1,33 @@
-*pycache*
-*idea*
+# Секреты и локальная конфигурация
 .env
-/aws/minio_data
+.env.*
+!.env.example
+*.pem
+*.key
+deploy/wireguard/*.conf
 /cloudflared
-/deploy/wireguard/*.conf
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+
+# Локальные данные
+/aws/minio_data
 
 # Frontend
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
-frontend/node_modules/.cache/
+
 beats-catalog-functional-prototype*

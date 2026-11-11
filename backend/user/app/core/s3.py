@@ -41,7 +41,7 @@ class S3Storage:
     def _normalize_key(self, url_or_key: str) -> str:
         prefix = f"{self.endpoint_url}/{self.bucket_name}/"
         if url_or_key.startswith(prefix):
-            return url_or_key[len(prefix):]
+            return url_or_key[len(prefix) :]
         return url_or_key
 
     async def generate_presigned_url(self, s3_key: str) -> str:

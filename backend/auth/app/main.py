@@ -7,8 +7,8 @@ from sqlalchemy import text
 
 from app.api.v1.endpoints import router as router_v1
 from app.core.database import async_session
-from app.core.logger import setup_logging
 from app.core.email_publisher import email_publisher_loop
+from app.core.logger import setup_logging
 from app.core.outbox_publisher import outbox_publisher_loop
 from app.core.rabbitmq import rabbit_client
 from config import settings
@@ -26,7 +26,8 @@ async def lifespan(app: FastAPI):
     stop_event.set()
     await publisher_task
     await email_task
-    await rabbit_client.connection.close()
+    if rabbit_client.connection:
+        await rabbit_client.connection.close()
 
 
 _docs = "/docs" if settings.DEBUG else None

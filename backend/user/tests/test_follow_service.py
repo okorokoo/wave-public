@@ -1,10 +1,11 @@
 import uuid
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from fastapi import HTTPException
 
-from app.services.profile import FollowService
 from app.schemas.profile import FollowToggleResponse
+from app.services.profile import FollowService
 
 
 def _make_service() -> FollowService:

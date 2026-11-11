@@ -1,43 +1,28 @@
-# 1. Выбираем базовый образ. slim-версия Python весит мало и содержит всё нужное.
 FROM python:3.12-slim
 
-# 2. Устанавливаем переменные окружения:
-# Не создавать .pyc файлы (экономим место)
-ENV PYTHONDONTWRITEBYTECODE=1
-# Выводить логи сразу в консоль, не буферизируя (важно для Docker)
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    POETRY_VIRTUALENVS_CREATE=false
 
-# 3. Устанавливаем системные зависимости и Poetry
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    netcat-openbsd \
-    && pip install poetry \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+        netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install "poetry==2.3.3"
 
-# 4. Создаем рабочую директорию внутри контейнера
 WORKDIR /user
 ENV PYTHONPATH=/user
 
-# 5. КЭШИРОВАНИЕ ЗАВИСИМОСТЕЙ (Самый важный этап!)
-# Сначала копируем только файлы с зависимостями.
-# Если ты изменишь код, но не добавишь библиотек, Docker пропустит установку pip/poetry.
-COPY user/pyproject.toml user/poetry.lock* /user/
+# Сначала только зависимости — слой кэшируется, пока не меняется lock-файл
+COPY user/pyproject.toml user/poetry.lock /user/
+RUN poetry install --only main --no-interaction --no-ansi --no-root
 
-# Настраиваем Poetry: не создавать venv внутри контейнера (он там не нужен)
-# И устанавливаем зависимости только для user-service
-RUN poetry config virtualenvs.create false \
-    && poetry lock \
-    && poetry install --no-interaction --no-ansi --no-root
-
-# 6. Копируем остальной код сервиса
 COPY user/app/ /user/app/
-COPY user/config.py /user/config.py
-
-COPY user/alembic.ini /user/alembic.ini
+COPY user/config.py user/alembic.ini /user/
 COPY user/migrations/ /user/migrations/
+COPY user/entrypoint.sh /user/entrypoint.sh
+RUN chmod +x /user/entrypoint.sh
 
-COPY user/entrypoint.sh .
-RUN chmod +x entrypoint.sh
-
+EXPOSE 8000
 ENTRYPOINT ["/user/entrypoint.sh"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

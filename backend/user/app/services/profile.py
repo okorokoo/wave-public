@@ -1,17 +1,17 @@
+import contextlib
 import logging
 import uuid
-from typing import Optional
 
 from fastapi import HTTPException, UploadFile
-
-logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
-from app.core.repo import ProfileRepo, FollowRepo
+from app.core.repo import FollowRepo, ProfileRepo
 from app.core.s3 import S3Storage
 from app.models.models import Profile
-from app.schemas.profile import ProfileUpdate, FollowToggleResponse
+from app.schemas.profile import FollowToggleResponse, ProfileUpdate
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_AVATAR_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_AVATAR_BYTES = 5 * 1024 * 1024  # 5 MB
@@ -23,20 +23,20 @@ class ProfileService:
         self._follow_repo = FollowRepo(db=db)
         self._s3 = S3Storage()
 
-    async def create_empty_profile(self, user_id: uuid.UUID, username: Optional[str] = None) -> Profile:
+    async def create_empty_profile(self, user_id: uuid.UUID, username: str | None = None) -> Profile:
         return await self._repo.create_profile(user_id=user_id, username=username)
 
     async def check_username_available(self, username: str) -> bool:
         return await self._repo.is_username_available(username)
 
-    async def get_profile_by_username(self, username: str, viewer_id: Optional[uuid.UUID] = None) -> dict:
+    async def get_profile_by_username(self, username: str, viewer_id: uuid.UUID | None = None) -> dict:
         profile = await self._repo.get_by_username(username)
         if not profile:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         return await self._build_profile_dict(profile, viewer_id=viewer_id)
 
-    async def _build_profile_dict(self, profile: Profile, viewer_id: Optional[uuid.UUID] = None) -> dict:
-        async def _get_avatar() -> Optional[str]:
+    async def _build_profile_dict(self, profile: Profile, viewer_id: uuid.UUID | None = None) -> dict:
+        async def _get_avatar() -> str | None:
             if not profile.avatar_url:
                 return None
             try:
@@ -44,11 +44,13 @@ class ProfileService:
             except Exception:
                 return None
 
-        viewer_is_other = bool(viewer_id and viewer_id != profile.user_id)
-
         followers_count, following_count = await self._follow_repo.get_counts(profile.user_id)
-        is_following: bool = await self._follow_repo.is_following(viewer_id, profile.user_id) if viewer_is_other else False
-        avatar_url: Optional[str] = await _get_avatar()
+        is_following = (
+            viewer_id is not None
+            and viewer_id != profile.user_id
+            and await self._follow_repo.is_following(viewer_id, profile.user_id)
+        )
+        avatar_url: str | None = await _get_avatar()
 
         return {
             "user_id": profile.user_id,
@@ -78,22 +80,24 @@ class ProfileService:
         if not update_data:
             return await self.get_my_profile(user_id)
 
-        new_username = update_data.get("username")
-        username_changed = new_username and new_username != profile.username
-        if username_changed:
-            if not await self._repo.is_username_available(new_username):
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот псевдоним уже занят")
+        new_username: str | None = update_data.get("username")
+        username_changed = bool(new_username) and new_username != profile.username
+        if username_changed and new_username and not await self._repo.is_username_available(new_username):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот псевдоним уже занят")
 
         try:
             await self._repo.update_profile(profile, update_data)
         except IntegrityError:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот псевдоним уже занят")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Этот псевдоним уже занят") from None
 
         if username_changed:
             try:
                 import json
+
                 import aio_pika
+
                 from config import settings as _s
+
                 async with await aio_pika.connect_robust(_s.rabbitmq_url) as conn:
                     channel = await conn.channel()
                     await channel.declare_queue("username_changed", durable=True)
@@ -126,10 +130,8 @@ class ProfileService:
             raise HTTPException(status_code=404, detail="Профиль не найден")
 
         if profile.avatar_url and profile.avatar_url != s3_key:
-            try:
+            with contextlib.suppress(Exception):
                 await self._s3.delete_objects([profile.avatar_url])
-            except Exception:
-                pass
 
         await self._s3.upload_file(file, s3_key)
         await self._repo.update_profile(profile, {"avatar_url": s3_key})

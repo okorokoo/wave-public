@@ -1,0 +1,58 @@
+# Установка: pip install pre-commit && pre-commit install
+# Прогон по всему репозиторию: pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: detect-private-key
+
+  # Не даём закоммитить токены и ключи
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.4
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+      - id: ruff-format
+
+  # У каждого сервиса свои пакеты app/ и config.py, поэтому mypy запускается
+  # отдельно на каждый сервис со своим конфигом из backend/<service>/pyproject.toml
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.4.1
+    hooks:
+      - id: mypy
+        name: mypy (auth-service)
+        files: ^backend/auth/
+        pass_filenames: false
+        args: ["--config-file=backend/auth/pyproject.toml", "backend/auth/app", "backend/auth/schemas", "backend/auth/config.py"]
+        additional_dependencies: &mypy-deps
+          - pydantic[email]>=2.12
+          - pydantic-settings>=2.13
+          - sqlalchemy>=2.0
+          - fastapi>=0.135
+          - aio-pika>=9.6
+          - types-python-jose
+      - id: mypy
+        name: mypy (user-service)
+        files: ^backend/user/
+        pass_filenames: false
+        args: ["--config-file=backend/user/pyproject.toml", "backend/user/app", "backend/user/config.py"]
+        additional_dependencies: *mypy-deps
+      - id: mypy
+        name: mypy (beat-service)
+        files: ^backend/beat/
+        pass_filenames: false
+        args: ["--config-file=backend/beat/pyproject.toml", "backend/beat/app", "backend/beat/config.py", "backend/beat/worker.py"]
+        additional_dependencies: *mypy-deps

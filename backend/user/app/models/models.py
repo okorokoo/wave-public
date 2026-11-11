@@ -1,7 +1,7 @@
 import uuid
 
-from sqlalchemy import String, UUID, Text, JSON, ForeignKey, DateTime, func
-from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase
+from sqlalchemy import JSON, UUID, DateTime, ForeignKey, String, Text, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):

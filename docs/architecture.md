@@ -6,7 +6,8 @@
 
 ## Сервисы
 
-Три независимых FastAPI-сервиса за общим nginx-гейтвеем, у каждого своя PostgreSQL. Связь
+Три независимых FastAPI-сервиса за общим nginx-гейтвеем, у каждого своя база PostgreSQL
+(database-per-service; локально — три базы в одном контейнере Postgres). Связь
 между сервисами — либо через JWT (без лишних HTTP-вызовов), либо асинхронно через RabbitMQ.
 
 ```mermaid
@@ -23,9 +24,9 @@ graph TB
     Nginx -->|"/users/*"| User[user-service]
     Nginx -->|"/beats/*"| Beat[beat-service]
 
-    Auth --> AuthDB[(auth-db)]
-    User --> UserDB[(user-db)]
-    Beat --> BeatDB[(beat-db)]
+    Auth --> AuthDB[(auth_db)]
+    User --> UserDB[(user_db)]
+    Beat --> BeatDB[(beat_db)]
 
     Auth -->|"user_created<br/>user_deleted"| MQ[(RabbitMQ)]
     MQ --> User

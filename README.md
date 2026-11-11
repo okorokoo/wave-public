@@ -1,182 +1,146 @@
 # Wave — маркетплейс битов
 
-Платформа для продажи и покупки музыкальных битов. Продюсеры загружают биты, покупатели приобретают лицензии и скачивают треки.
+Backend платформы, где музыкальные продюсеры продают биты, а артисты покупают на них лицензии.
+Продюсер загружает WAV — сервис сам режет превью с голосовым тегом-водяным знаком, конвертирует в MP3
+и публикует бит в каталоге. Покупатель слушает превью, оплачивает через ЮKassa и получает
+доступ к полному WAV и стемам.
+
+Проект запущен в закрытой бете. Архитектура — три микросервиса на FastAPI, общающихся через JWT и
+события RabbitMQ; у каждого сервиса своя база PostgreSQL.
 
 ## Стек
 
 | Слой | Технологии |
 |---|---|
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS, Zustand, React Query, Radix UI |
-| Backend | FastAPI, SQLAlchemy (async), Pydantic v2, Poetry |
-| Базы данных | PostgreSQL 17 (по одной на сервис) |
-| Очередь | RabbitMQ |
-| Хранилище | MinIO (S3-совместимое) |
-| Платежи | YooKassa |
-| Gateway | Nginx |
-| Мониторинг | Prometheus, Loki, Promtail, Grafana |
+| Язык и фреймворк | Python 3.12, FastAPI, Pydantic v2, pydantic-settings |
+| Данные | PostgreSQL 17, SQLAlchemy 2.0 (async, asyncpg), Alembic |
+| Межсервисное взаимодействие | RabbitMQ (aio-pika), transactional outbox |
+| Файлы | S3-совместимое хранилище MinIO (aioboto3), ffmpeg |
+| Платежи | ЮKassa (вебхук + polling-фолбэк) |
+| Авторизация | JWT (access + refresh), bcrypt |
+| Инфраструктура | Docker Compose, nginx (API-gateway) |
+| Наблюдаемость | Prometheus, Grafana, Loki, Promtail |
+| Качество кода | pytest, ruff, mypy, pre-commit, gitleaks |
+| Frontend (демо-клиент) | React 18, TypeScript, Vite |
 
 ## Архитектура
 
+```mermaid
+graph TB
+    Client[Браузер / SPA] --> Nginx["nginx :80<br/>API-gateway + статика"]
+
+    Nginx -->|/auth/*| Auth[auth-service]
+    Nginx -->|/users/*| User[user-service]
+    Nginx -->|/beats/*| Beat[beat-service]
+
+    subgraph pg [PostgreSQL]
+        AuthDB[(auth_db)]
+        UserDB[(user_db)]
+        BeatDB[(beat_db)]
+    end
+
+    Auth --> AuthDB
+    User --> UserDB
+    Beat --> BeatDB
+
+    Auth -->|"user_created, user_deleted<br/>(outbox)"| MQ[(RabbitMQ)]
+    User -->|username_changed| MQ
+    MQ --> User
+    MQ --> Beat
+
+    Beat -->|задача на обработку аудио| MQ
+    MQ --> Worker[beat-worker]
+    Worker -->|"WAV → ffmpeg → превью MP3"| S3[(MinIO)]
+    Beat --> S3
+    User -->|аватары| S3
+
+    Auth -.->|письма| SMTP[SMTP / Mailpit]
+    YooKassa[ЮKassa] -.->|вебхук об оплате| Beat
 ```
-Browser
-  └── Nginx :80
-        ├── /          → Frontend SPA
-        ├── /auth/*    → auth-service :8000
-        ├── /users/*   → user-service :8000
-        └── /beats/*   → beat-service :8000
 
-auth-service  ──┐
-user-service  ──┼── RabbitMQ (события: user_created, user_deleted)
-beat-service  ──┘
+| Сервис | Отвечает за |
+|---|---|
+| **auth-service** | Регистрация, вход, refresh-токены, подтверждение email, смена пароля, удаление аккаунта. Публикует события через transactional outbox |
+| **user-service** | Профили, аватары, подписки (follow). Создаёт/удаляет профиль по событиям от auth |
+| **beat-service** | Каталог и поиск битов, загрузка, лайки, прослушивания, покупки и платежи ЮKassa, выдача файлов купившим |
+| **beat-worker** | Фоновая обработка аудио из очереди: превью с войс-тегом, MP3, загрузка в S3 |
+| **nginx** | Единая точка входа: маршрутизация по префиксу, отдача собранного фронтенда |
 
-beat-service  ── MinIO (аудио, обложки, стемы, войстеги)
-user-service  ── MinIO (аватары)
+Сервисы не ходят друг к другу по HTTP: данные пользователя берутся из JWT, а изменения
+распространяются событиями через RabbitMQ. Подробнее, с диаграммами покупки и выдачи файлов —
+в [docs/architecture.md](docs/architecture.md).
 
-beat-worker   ── фоновая конвертация WAV → MP3
-```
+## Запуск
 
-**Покупка:** сейчас один тир — оплата даёт полный WAV. Пикер лицензий Basic/Premium/Exclusive
-спроектирован, но ещё не реализован (см. [docs/architecture.md](docs/architecture.md#известные-ограничения-актуально-на-момент-написания)).
-
-Подробности архитектуры, диаграммы (сервисы, покупка, прод-деплой) и обоснование ключевых
-решений — в [docs/architecture.md](docs/architecture.md). Текущий прогресс и план на
-публичный запуск — в [docs/roadmap.md](docs/roadmap.md).
-
-## Быстрый старт
-
-### Требования
-- Docker Desktop
-- Node.js 20+ (для локальной разработки фронтенда)
-
-### 1. Переменные окружения
-
-Скопируй `.env.example` в `.env` и заполни:
+Нужен только Docker (с Compose v2).
 
 ```bash
-cp .env.example .env
+git clone https://github.com/<your-account>/wave.git
+cd wave
+docker compose up --build
 ```
 
-### 2. Запуск
+Файл `.env` для запуска не нужен: у всех переменных в `docker-compose.yml` есть dev-значения.
+Чтобы их переопределить, скопируйте [`.env.example`](.env.example) в `.env`.
+Первая сборка занимает несколько минут.
 
-```bash
-docker compose up -d --build
-```
-
-Первый запуск займёт несколько минут (сборка образов + `poetry lock`).
-
-### 3. Открой в браузере
-
-| Сервис | URL |
+| Что | Адрес |
 |---|---|
 | Приложение | http://localhost |
-| API документация (auth) | http://localhost/auth/docs |
-| API документация (users) | http://localhost/users/docs |
-| API документация (beats) | http://localhost/beats/docs |
-| Grafana (мониторинг) | http://localhost:4000 — admin / admin |
-| Prometheus | http://localhost:9090 |
-| MinIO консоль | http://localhost:9001 — minioadmin / minioadminpassword |
-| MailHog (email) | http://localhost:8025 |
-| RabbitMQ | http://localhost:15672 — guest / guest |
+| Swagger: auth / users / beats | http://localhost/auth/docs · http://localhost/users/docs · http://localhost/beats/docs |
+| Mailpit (письма подтверждения email) | http://localhost:8025 |
+| RabbitMQ (wave / wave) | http://localhost:15672 |
+| MinIO-консоль (wave-minio / wave-minio-secret) | http://localhost:9001 |
+| PostgreSQL (wave / wave) | `localhost:5432`, базы `auth_db`, `user_db`, `beat_db` |
 
-> Swagger доступен только при `DEBUG=true` в `.env`
+Миграции Alembic применяются автоматически при старте каждого сервиса.
 
-## Переменные окружения
-
-Все сервисы читают один общий `.env` из корня проекта.
-
-```env
-# --- Пользователь БД (общий для всех баз) ---
-USER=wave
-PASSWORD=your_password
-
-# --- Auth service ---
-AUTH_DB_NAME=auth_db
-AUTH_DB_HOST=auth-db
-AUTH_DB_PORT_OUTSIDE=5433      # порт на хосте для прямого подключения
-
-# --- User service ---
-USER_DB_NAME=user_db
-USER_DB_HOST=user-db
-USER_DB_PORT_OUTSIDE=5434
-
-# --- Beat service ---
-BEAT_DB_NAME=beat_db
-BEAT_DB_HOST=beat-db
-BEAT_DB_PORT_OUTSIDE=5435
-
-# --- Общее ---
-DB_PORT_INSIDE=5432             # порт внутри контейнера (не менять)
-SECRET_KEY=your_jwt_secret      # минимум 32 символа
-DEBUG=false                     # true — включает Swagger UI
-
-# --- RabbitMQ ---
-RABBITMQ_PORT=5672
-RABBITMQ_PORT_ADMIN=15672
-RABBITMQ_LOGIN=guest
-RABBITMQ_PASSWORD=guest
-
-# --- YooKassa ---
-YOOKASSA_SHOP_ID=your_shop_id
-YOOKASSA_SECRET_KEY=your_secret
-YOOKASSA_RETURN_URL=http://localhost/payment-result
-
-# --- MinIO / S3 (значения по умолчанию для локальной разработки) ---
-S3_ENDPOINT_URL=http://minio:9000
-S3_PUBLIC_ENDPOINT_URL=http://localhost:9000
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=minioadminpassword
-S3_BUCKET_NAME=wave-beats
-```
-
-## Сервисы
-
-### auth-service
-Регистрация, вход, JWT-токены, восстановление пароля по email.  
-События в RabbitMQ: `user_created`, `user_deleted`.  
-Паттерн outbox — события публикуются надёжно даже при перезапуске.
-
-### user-service
-Профили пользователей, подписки (follow/unfollow), аватары.  
-Слушает `user_created` (создаёт пустой профиль) и `user_deleted` (удаляет профиль).
-
-### beat-service
-Биты, покупки, платежи YooKassa, лайки, счётчики прослушиваний, стемы, войстеги.  
-Webhook от YooKassa → статус платежа → создание покупки.
-
-### beat-worker
-Конвертация загруженного WAV в MP3 через ffmpeg.  
-Читает задачи из RabbitMQ-очереди, результат пишет в MinIO.
-
-## Тесты
+Мониторинг (Prometheus, Grafana, Loki) запускается отдельным профилем:
 
 ```bash
-# auth-service
-cd backend/auth && python -m pytest tests/ -v
-
-# beat-service
-cd backend/beat && python -m pytest tests/ -v
-
-# user-service
-cd backend/user && python -m pytest tests/ -v
-
-# frontend (утилиты)
-cd frontend && npm run test
+docker compose --profile monitoring up --build
 ```
 
-## Мониторинг
+Grafana будет на http://localhost:4000 (admin / admin) с готовым дашбордом.
 
-Grafana автоматически загружает дашборд **Wave — Мониторинг** при старте.  
-Метрики собирает `prometheus-fastapi-instrumentator` (эндпоинт `/metrics` на каждом сервисе).  
-Логи — Promtail через Docker socket → Loki.
+> Оплата по умолчанию выключена. Чтобы проверить покупку, укажите тестовые
+> `YOOKASSA_SHOP_ID` и `YOOKASSA_SECRET_KEY` из [личного кабинета ЮKassa](https://yookassa.ru/developers) в `.env`.
 
-Порядок старта: Loki → Promtail → бизнес-сервисы (гарантирует что стартовые логи не теряются).
+## Разработка
 
-## Ограничения на загрузку файлов
+У каждого сервиса свой `pyproject.toml` и lock-файл (Poetry):
 
-| Тип | Лимит |
-|---|---|
-| Аудио (WAV/MP3) | 200 МБ |
-| Обложка (JPEG/PNG/WebP) | 5 МБ |
-| Аватар | 5 МБ |
-| Стемы (ZIP) | 500 МБ |
-| Nginx (client_max_body_size) | 100 МБ |
+```bash
+cd backend/beat
+poetry install --with test
+poetry run pytest          # юнит-тесты
+poetry run mypy app config.py worker.py
+```
+
+Линтер, форматтер и проверки типов подключены через pre-commit:
+
+```bash
+pip install pre-commit
+pre-commit install          # проверки перед каждым коммитом
+pre-commit run --all-files  # прогнать всё вручную
+```
+
+В хуках: ruff (lint + format), mypy отдельно для каждого сервиса, gitleaks (поиск секретов),
+базовые проверки YAML/TOML и пробелов.
+
+## Структура репозитория
+
+```
+backend/
+  auth/  user/  beat/        # сервисы: app/, migrations/, tests/, Dockerfile
+  nginx/nginx.conf           # маршрутизация API-gateway
+deploy/postgres/             # создание баз при первом старте Postgres
+docs/                        # архитектура и roadmap
+frontend/                    # SPA-клиент (React + TypeScript)
+monitoring/                  # конфиги Prometheus, Loki, Promtail, дашборд Grafana
+docker-compose.yml
+```
+
+## Инженерные решения
+
+<!-- Заполнить: ключевые решения, альтернативы и компромиссы. -->

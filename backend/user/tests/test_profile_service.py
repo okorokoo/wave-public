@@ -1,11 +1,12 @@
 import uuid
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from fastapi import HTTPException
 
 import app.services.profile as profile_module
-from app.services.profile import ProfileService
 from app.schemas.profile import ProfileUpdate
+from app.services.profile import ProfileService
 
 
 def _make_service() -> ProfileService:

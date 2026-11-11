@@ -1,4 +1,5 @@
 """Unit tests for StemsService — authorization, format validation, license gate."""
+
 import uuid
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
@@ -6,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
-from app.services.beat import StemsService, MAX_STEMS_BYTES
+from app.services.beat import StemsService
 
 
 def _make_beat(author_id=None, is_deleted=False, has_stems=False):
@@ -57,6 +58,7 @@ def _make_service():
 
 
 # ── upload_stems ───────────────────────────────────────────────────────────────
+
 
 class TestUploadStems:
     async def test_beat_not_found_raises_404(self):
@@ -119,6 +121,7 @@ class TestUploadStems:
 
         # Use a small limit so we don't allocate 500 MB in memory
         import app.services.beat as beat_module
+
         original = beat_module.MAX_STEMS_BYTES
         beat_module.MAX_STEMS_BYTES = 10
 
@@ -147,6 +150,7 @@ class TestUploadStems:
 
 
 # ── get_stems_download_url ─────────────────────────────────────────────────────
+
 
 class TestGetStemsDownloadUrl:
     async def test_beat_not_found_raises_404(self):
@@ -203,6 +207,7 @@ class TestGetStemsDownloadUrl:
         assert result.stream_url.startswith(f"/beats/{beat.id}/stems/stream?token=")
         token = result.stream_url.rsplit("token=", 1)[1]
         from app.core.download_token import verify_download_token
+
         payload = verify_download_token(token)
         assert payload["beat_id"] == str(beat.id)
         assert payload["buyer_id"] == str(buyer_id)

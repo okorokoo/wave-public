@@ -5,6 +5,7 @@ Run from project root (where .env lives):
 Or directly:
   python scripts/sync_author_names.py
 """
+
 import asyncio
 import os
 from pathlib import Path
@@ -18,7 +19,7 @@ if env_path.exists():
             k, _, v = line.partition("=")
             os.environ.setdefault(k.strip(), v.strip())
 
-import asyncpg
+import asyncpg  # noqa: E402 — после загрузки .env
 
 
 def _dsn(user, password, host, port, db):
@@ -44,7 +45,8 @@ async def main():
         for row in profiles:
             result = await beat_conn.execute(
                 "UPDATE beats SET author_name = $1 WHERE author_id = $2 AND author_name IS DISTINCT FROM $1",
-                row["username"], row["user_id"],
+                row["username"],
+                row["user_id"],
             )
             count = int(result.split()[-1])
             if count:

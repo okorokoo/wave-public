@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
 
 from fastapi import Form
 from pydantic import BaseModel, ConfigDict, Field
@@ -9,39 +8,39 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class BeatCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=100, examples=["Type Beat 2026"])
-    bpm: Optional[int] = Field(None, ge=40, le=300, description="Темп в ударах в минуту")
-    key: Optional[str] = Field(None, max_length=10, examples=["Am", "C# Min"])
+    bpm: int | None = Field(None, ge=40, le=300, description="Темп в ударах в минуту")
+    key: str | None = Field(None, max_length=10, examples=["Am", "C# Min"])
     price: Decimal = Field(..., ge=0, decimal_places=2)
-    genre: Optional[str] = Field(None, min_length=1, max_length=100)
-    primary_instrument: Optional[str] = Field(None, min_length=1, max_length=100)
-    description: Optional[str] = Field(None, max_length=500)
+    genre: str | None = Field(None, min_length=1, max_length=100)
+    primary_instrument: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = Field(None, max_length=500)
 
 
 class BeatUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=1, max_length=100)
-    bpm: Optional[int] = Field(None, ge=40, le=300)
-    key: Optional[str] = Field(None, max_length=10)
-    price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
-    genre: Optional[str] = Field(None, min_length=1, max_length=100)
-    primary_instrument: Optional[str] = Field(None, min_length=1, max_length=100)
-    description: Optional[str] = Field(None, max_length=500)
-    tags: Optional[List[str]] = None
+    title: str | None = Field(None, min_length=1, max_length=100)
+    bpm: int | None = Field(None, ge=40, le=300)
+    key: str | None = Field(None, max_length=10)
+    price: Decimal | None = Field(None, ge=0, decimal_places=2)
+    genre: str | None = Field(None, min_length=1, max_length=100)
+    primary_instrument: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = Field(None, max_length=500)
+    tags: list[str] | None = None
 
 
 class BeatResponse(BaseModel):
     id: uuid.UUID
     title: str
-    bpm: Optional[int]
-    key: Optional[str]
+    bpm: int | None
+    key: str | None
     price: Decimal
-    genre: Optional[str]
-    primary_instrument: Optional[str]
+    genre: str | None
+    primary_instrument: str | None
     audio_preview_url: str
-    cover_url: Optional[str] = None
-    tags: List[str] = []
+    cover_url: str | None = None
+    tags: list[str] = []
     author_id: uuid.UUID
-    author_name: Optional[str] = None
-    description: Optional[str] = None
+    author_name: str | None = None
+    description: str | None = None
     likes_count: int = 0
     is_liked: bool = False
     play_count: int = 0
@@ -79,16 +78,16 @@ class VoiceTagResponse(BaseModel):
 
 class PaymentResultResponse(BaseModel):
     status: str  # pending | succeeded | canceled
-    beat_id: Optional[str] = None
-    beat_title: Optional[str] = None
+    beat_id: str | None = None
+    beat_title: str | None = None
 
 
 class PendingPaymentResponse(BaseModel):
     payment_id: str
     beat_id: uuid.UUID
     beat_title: str
-    beat_cover_url: Optional[str] = None
-    beat_author_name: Optional[str] = None
+    beat_cover_url: str | None = None
+    beat_author_name: str | None = None
     amount: Decimal
     created_at: datetime
 
@@ -106,7 +105,7 @@ class PurchaseStatusResponse(BaseModel):
 
 
 class PaginatedBeatsResponse(BaseModel):
-    items: List[BeatResponse]
+    items: list[BeatResponse]
     total: int
     limit: int
     offset: int
@@ -126,7 +125,7 @@ class MyBeatResponse(BeatResponse):
 
 
 class PaginatedMyBeatsResponse(BaseModel):
-    items: List[MyBeatResponse]
+    items: list[MyBeatResponse]
     total: int
     limit: int
     offset: int
@@ -136,14 +135,14 @@ class BeatForm:
     def __init__(
         self,
         title: str = Form(..., min_length=1, max_length=100),
-        bpm: Optional[int] = Form(None, ge=40, le=300),
-        key: Optional[str] = Form(None, max_length=10),
+        bpm: int | None = Form(None, ge=40, le=300),
+        key: str | None = Form(None, max_length=10),
         price: Decimal = Form(..., ge=0),
-        genre: Optional[str] = Form(None),
-        primary_instrument: Optional[str] = Form(None),
-        tags: List[str] = Form(default=[]),
-        artist_name: Optional[str] = Form(None, max_length=60),
-        description: Optional[str] = Form(None, max_length=500),
+        genre: str | None = Form(None),
+        primary_instrument: str | None = Form(None),
+        tags: list[str] = Form(default=[]),
+        artist_name: str | None = Form(None, max_length=60),
+        description: str | None = Form(None, max_length=500),
     ):
         self.title = title
         self.bpm = bpm

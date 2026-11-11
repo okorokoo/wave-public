@@ -1,10 +1,10 @@
-from typing import Optional
+import uuid
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 from pydantic import BaseModel
-import uuid
+
 from config import settings
 
 security = HTTPBearer()
@@ -27,7 +27,7 @@ def _decode_payload(auth: HTTPAuthorizationCredentials) -> dict:
             raise credentials_exception
         return payload
     except (JWTError, ValueError):
-        raise credentials_exception
+        raise credentials_exception from None
 
 
 async def get_current_user_id(auth: HTTPAuthorizationCredentials = Depends(security)) -> uuid.UUID:
@@ -50,8 +50,8 @@ async def get_current_user_username(auth: HTTPAuthorizationCredentials = Depends
 
 
 async def get_optional_user_id(
-    auth: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
-) -> Optional[uuid.UUID]:
+    auth: HTTPAuthorizationCredentials | None = Depends(security_optional),
+) -> uuid.UUID | None:
     if not auth:
         return None
     try:

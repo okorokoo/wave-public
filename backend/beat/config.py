@@ -12,11 +12,14 @@ class Settings(BaseSettings):
     PASSWORD: str
     BEAT_DB_NAME: str
     BEAT_DB_HOST: str
-    DB_PORT_INSIDE: int
+    DB_PORT_INSIDE: int = 5432
 
     @property
     def database_url(self) -> str:
-        return f"postgresql+asyncpg://{self.DB_USER}:{self.PASSWORD}@{self.BEAT_DB_HOST}:{self.DB_PORT_INSIDE}/{self.BEAT_DB_NAME}"
+        return (
+            f"postgresql+asyncpg://{self.DB_USER}:{self.PASSWORD}"
+            f"@{self.BEAT_DB_HOST}:{self.DB_PORT_INSIDE}/{self.BEAT_DB_NAME}"
+        )
 
     DEBUG: bool = False
 
@@ -25,20 +28,20 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
 
     # Настройки брокера
-    RABBITMQ_PORT: int
-    RABBITMQ_PORT_ADMIN: int
+    RABBITMQ_HOST: str = "rabbitmq"
+    RABBITMQ_PORT: int = 5672
     RABBITMQ_LOGIN: str
     RABBITMQ_PASSWORD: str
 
     @property
     def rabbitmq_url(self) -> str:
-        return f"amqp://{self.RABBITMQ_LOGIN}:{self.RABBITMQ_PASSWORD}@rabbitmq:{self.RABBITMQ_PORT}/"
+        return f"amqp://{self.RABBITMQ_LOGIN}:{self.RABBITMQ_PASSWORD}@{self.RABBITMQ_HOST}:{self.RABBITMQ_PORT}/"
 
     # S3 / MinIO
     S3_ENDPOINT_URL: str = "http://minio:9000"
     S3_PUBLIC_ENDPOINT_URL: str = "http://localhost:9000"
-    S3_ACCESS_KEY: str = "minioadmin"
-    S3_SECRET_KEY: str = "minioadminpassword"
+    S3_ACCESS_KEY: str
+    S3_SECRET_KEY: str
     S3_BUCKET_NAME: str = "wave-beats"
     S3_PRESIGNED_URL_EXPIRE_SECONDS: int = 3600
     S3_DOWNLOAD_URL_EXPIRE_SECONDS: int = 3600
@@ -49,13 +52,11 @@ class Settings(BaseSettings):
     YOOKASSA_SECRET_KEY: str = ""
     YOOKASSA_RETURN_URL: str = "http://localhost:3000/payment/success"
 
-    # Конфигурация загрузки из .env
     model_config = SettingsConfigDict(
         env_file=os.path.join(BASE_DIR, ".env"),
         env_file_encoding="utf-8",
-        extra="ignore"  # Игнорировать лишние переменные в .env
+        extra="ignore",
     )
 
 
-# Создаем синглтон (один экземпляр на все приложение)
 settings = Settings()

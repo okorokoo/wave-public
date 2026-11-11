@@ -1,9 +1,8 @@
 import uuid
-from typing import Optional
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 
 from config import settings
 
@@ -31,12 +30,12 @@ async def get_current_user_id(
             raise CREDENTIALS_EXCEPTION
         return uuid.UUID(user_id)
     except (JWTError, ValueError):
-        raise CREDENTIALS_EXCEPTION
+        raise CREDENTIALS_EXCEPTION from None
 
 
 async def get_optional_user_id(
-    auth: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
-) -> Optional[uuid.UUID]:
+    auth: HTTPAuthorizationCredentials | None = Depends(security_optional),
+) -> uuid.UUID | None:
     if not auth:
         return None
     try:

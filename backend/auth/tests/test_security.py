@@ -1,13 +1,13 @@
-from datetime import timedelta
+from datetime import UTC, timedelta
 
 import pytest
 from jose import jwt
 
 from app.core.security import (
-    hash_password,
-    verify_password,
     create_access_token,
     create_refresh_token,
+    hash_password,
+    verify_password,
 )
 from config import settings
 
@@ -51,12 +51,13 @@ class TestCreateAccessToken:
         assert "exp" in payload
 
     def test_custom_expires_delta(self):
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         delta = timedelta(seconds=60)
         token = create_access_token({"sub": "user-abc"}, expires_delta=delta)
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         exp = payload["exp"]
-        now = datetime.now(timezone.utc).timestamp()
+        now = datetime.now(UTC).timestamp()
         assert abs(exp - now - 60) < 5  # within 5 seconds of expected
 
     def test_extra_claims_preserved(self):
@@ -67,6 +68,7 @@ class TestCreateAccessToken:
 
     def test_wrong_key_raises(self):
         from jose import JWTError
+
         token = create_access_token({"sub": "u1"})
         with pytest.raises(JWTError):
             jwt.decode(token, "wrong-key", algorithms=[settings.ALGORITHM])
@@ -84,7 +86,6 @@ class TestCreateRefreshToken:
         assert payload["sub"] == "user-xyz"
 
     def test_refresh_token_has_longer_expiry_than_access(self):
-        from datetime import datetime, timezone
         access = create_access_token({"sub": "u"})
         refresh = create_refresh_token({"sub": "u"})
         access_payload = jwt.decode(access, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])

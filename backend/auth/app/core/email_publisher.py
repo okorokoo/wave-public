@@ -1,6 +1,7 @@
 import asyncio
+import contextlib
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -35,7 +36,7 @@ async def process_email_batch() -> None:
                     body_plain=email.body_plain,
                     body_html=email.body_html,
                 )
-                email.sent_at = datetime.now(timezone.utc)
+                email.sent_at = datetime.now(UTC)
             except Exception as exc:
                 email.attempts += 1
                 email.last_error = str(exc)[:500]
@@ -51,7 +52,5 @@ async def email_publisher_loop(stop_event: asyncio.Event) -> None:
         except Exception as exc:
             logger.error("Email publisher error: %s", exc)
 
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(stop_event.wait(), timeout=POLL_INTERVAL_SECONDS)
-        except asyncio.TimeoutError:
-            pass

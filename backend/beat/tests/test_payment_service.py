@@ -1,5 +1,7 @@
 """Unit tests for PaymentService — business logic only, no DB/S3/YooKassa."""
+
 import uuid
+from datetime import UTC
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -16,7 +18,7 @@ def _make_beat(author_id=None, is_deleted=False, price=Decimal("990.00"), title=
     beat.is_deleted = is_deleted
     beat.price = price
     beat.title = title
-    beat.audio_full_url = f"beats/folder/full_test.wav"
+    beat.audio_full_url = "beats/folder/full_test.wav"
     beat.cover_url = None
     beat.stems_url = None
     return beat
@@ -43,6 +45,7 @@ def _make_service():
 
 
 # ── create_checkout ────────────────────────────────────────────────────────────
+
 
 class TestCreateCheckout:
     async def test_beat_not_found_raises_404(self):
@@ -97,6 +100,7 @@ class TestCreateCheckout:
 
 # ── get_payment_result ─────────────────────────────────────────────────────────
 
+
 class TestGetPaymentResult:
     async def test_payment_not_found_raises_404(self):
         svc = _make_service()
@@ -131,8 +135,7 @@ class TestGetPaymentResult:
         payment = _make_payment(buyer_id=buyer_id, status="pending")
         svc.payment_repo.get_by_id.return_value = payment
 
-        with patch("app.services.payment.YooPayment") as mock_yoo, \
-             patch("app.services.payment._configure_yookassa"):
+        with patch("app.services.payment.YooPayment") as mock_yoo, patch("app.services.payment._configure_yookassa"):
             mock_yoo.find_one.side_effect = Exception("YooKassa down")
             result = await svc.get_payment_result(payment.id, buyer_id)
 
@@ -169,6 +172,7 @@ class TestGetPaymentResult:
 
 # ── get_pending_payments ───────────────────────────────────────────────────────
 
+
 class TestGetPendingPayments:
     async def test_empty_returns_empty_list(self):
         svc = _make_service()
@@ -186,8 +190,9 @@ class TestGetPendingPayments:
         beat.cover_url = None
         beat.author_name = "DJ Test"
 
-        from datetime import datetime, timezone
-        payment.created_at = datetime.now(timezone.utc)
+        from datetime import datetime
+
+        payment.created_at = datetime.now(UTC)
 
         svc.payment_repo.get_pending_by_buyer.return_value = [(payment, beat)]
 

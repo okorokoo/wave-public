@@ -5,11 +5,12 @@ from decimal import Decimal
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
-from yookassa import Configuration, Payment as YooPayment
+from yookassa import Configuration
+from yookassa import Payment as YooPayment
 from yookassa.domain.common import SecurityHelper
 from yookassa.domain.notification import WebhookNotificationEventType, WebhookNotificationFactory
 
-from app.core.repo import BeatRepo, PurchaseRepo, PaymentRepo
+from app.core.repo import BeatRepo, PaymentRepo, PurchaseRepo
 from app.core.s3 import S3Storage
 from app.schemas.beat import CheckoutResponse, PaymentResultResponse, PendingPaymentResponse
 from config import settings
@@ -141,15 +142,17 @@ class PaymentService:
         result = []
         for payment, beat in rows:
             cover_url = self.s3.get_public_url(beat.cover_url) if beat.cover_url else None
-            result.append(PendingPaymentResponse(
-                payment_id=payment.id,
-                beat_id=beat.id,
-                beat_title=beat.title,
-                beat_cover_url=cover_url,
-                beat_author_name=beat.author_name,
-                amount=payment.amount,
-                created_at=payment.created_at,
-            ))
+            result.append(
+                PendingPaymentResponse(
+                    payment_id=payment.id,
+                    beat_id=beat.id,
+                    beat_title=beat.title,
+                    beat_cover_url=cover_url,
+                    beat_author_name=beat.author_name,
+                    amount=payment.amount,
+                    created_at=payment.created_at,
+                )
+            )
         return result
 
     # ── Webhook ───────────────────────────────────────────────────────────────
@@ -202,7 +205,8 @@ class PaymentService:
             await self.db.rollback()
             logger.warning(
                 "Purchase already exists (race condition): beat=%s buyer=%s — skipping",
-                beat_id, buyer_id,
+                beat_id,
+                buyer_id,
             )
 
         await self.payment_repo.update_status(payment_id, "succeeded")

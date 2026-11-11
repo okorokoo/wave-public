@@ -1,13 +1,20 @@
-from pydantic import BaseModel, EmailStr, Field
-from uuid import UUID
 from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, EmailStr, Field
 
 
 # Данные для создания пользователя
 class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, description="Пароль минимум 8 символов")
-    username: str = Field(..., min_length=3, max_length=30, pattern=r'^[a-zA-Z0-9_]+$', description="Псевдоним: латиница, цифры, подчёркивание")
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=30,
+        pattern=r"^[a-zA-Z0-9_]+$",
+        description="Псевдоним: латиница, цифры, подчёркивание",
+    )
     invite_code: str = ""
 
 

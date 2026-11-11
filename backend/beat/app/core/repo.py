@@ -1,14 +1,14 @@
 import uuid
-from typing import Optional, Sequence, List
+from collections.abc import Sequence
 
-from sqlalchemy import select, and_, func, delete, update, text
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import BEAT_DELETED
-from app.models.models import Beat, Purchase, BeatTag, Payment, UserVoiceTag, BeatLike
+from app.models.models import Beat, BeatLike, BeatTag, Payment, Purchase, UserVoiceTag
 
 
-def _normalize_tags(tags: List[str]) -> List[str]:
+def _normalize_tags(tags: list[str]) -> list[str]:
     seen = set()
     result = []
     for t in tags:
@@ -51,21 +51,21 @@ class BeatRepo:
         await self.db.refresh(beat)
         return beat
 
-    async def get_by_id(self, beat_id: uuid.UUID) -> Optional[Beat]:
+    async def get_by_id(self, beat_id: uuid.UUID) -> Beat | None:
         """Поиск конкретного бита по его ID"""
         query = select(Beat).where(Beat.id == beat_id)
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
     def _build_filters(
-            self,
-            search: Optional[str],
-            genre: Optional[str],
-            instrument: Optional[str],
-            min_bpm: Optional[int],
-            max_bpm: Optional[int],
-            tag: Optional[str] = None,
-            author_id: Optional[uuid.UUID] = None,
+        self,
+        search: str | None,
+        genre: str | None,
+        instrument: str | None,
+        min_bpm: int | None,
+        max_bpm: int | None,
+        tag: str | None = None,
+        author_id: uuid.UUID | None = None,
     ) -> list:
         filters = [Beat.is_deleted == False]  # noqa: E712
         if search:
@@ -79,22 +79,20 @@ class BeatRepo:
         if max_bpm:
             filters.append(Beat.bpm <= max_bpm)
         if tag:
-            filters.append(Beat.id.in_(
-                select(BeatTag.beat_id).where(BeatTag.tag == tag.strip().lower())
-            ))
+            filters.append(Beat.id.in_(select(BeatTag.beat_id).where(BeatTag.tag == tag.strip().lower())))
         if author_id:
             filters.append(Beat.author_id == author_id)
         return filters
 
     async def count_beats(
-            self,
-            search: Optional[str] = None,
-            genre: Optional[str] = None,
-            instrument: Optional[str] = None,
-            min_bpm: Optional[int] = None,
-            max_bpm: Optional[int] = None,
-            tag: Optional[str] = None,
-            author_id: Optional[uuid.UUID] = None,
+        self,
+        search: str | None = None,
+        genre: str | None = None,
+        instrument: str | None = None,
+        min_bpm: int | None = None,
+        max_bpm: int | None = None,
+        tag: str | None = None,
+        author_id: uuid.UUID | None = None,
     ) -> int:
         filters = self._build_filters(search, genre, instrument, min_bpm, max_bpm, tag=tag, author_id=author_id)
         query = select(func.count()).select_from(Beat)
@@ -104,16 +102,16 @@ class BeatRepo:
         return result.scalar_one()
 
     async def list_beats(
-            self,
-            search: Optional[str] = None,
-            genre: Optional[str] = None,
-            instrument: Optional[str] = None,
-            min_bpm: Optional[int] = None,
-            max_bpm: Optional[int] = None,
-            tag: Optional[str] = None,
-            author_id: Optional[uuid.UUID] = None,
-            limit: int = 20,
-            offset: int = 0,
+        self,
+        search: str | None = None,
+        genre: str | None = None,
+        instrument: str | None = None,
+        min_bpm: int | None = None,
+        max_bpm: int | None = None,
+        tag: str | None = None,
+        author_id: uuid.UUID | None = None,
+        limit: int = 20,
+        offset: int = 0,
     ) -> Sequence[Beat]:
         filters = self._build_filters(search, genre, instrument, min_bpm, max_bpm, tag=tag, author_id=author_id)
         query = select(Beat)
@@ -124,8 +122,12 @@ class BeatRepo:
         return result.scalars().all()
 
     async def count_by_author(self, author_id: uuid.UUID) -> int:
-        query = select(func.count()).select_from(Beat).where(
-            and_(Beat.author_id == author_id, Beat.is_deleted == False)  # noqa: E712
+        query = (
+            select(func.count())
+            .select_from(Beat)
+            .where(
+                and_(Beat.author_id == author_id, Beat.is_deleted == False)  # noqa: E712
+            )
         )
         result = await self.db.execute(query)
         return result.scalar_one()
@@ -144,9 +146,7 @@ class BeatRepo:
         return result.all()
 
     async def update_stems_url(self, beat_id: uuid.UUID, stems_key: str) -> None:
-        await self.db.execute(
-            update(Beat).where(Beat.id == beat_id).values(stems_url=stems_key)
-        )
+        await self.db.execute(update(Beat).where(Beat.id == beat_id).values(stems_url=stems_key))
         await self.db.commit()
 
     async def soft_delete(self, beat: Beat) -> None:
@@ -161,10 +161,7 @@ class BeatRepo:
 
     async def increment_play_count(self, beat_id: uuid.UUID) -> int:
         result = await self.db.execute(
-            update(Beat)
-            .where(Beat.id == beat_id)
-            .values(play_count=Beat.play_count + 1)
-            .returning(Beat.play_count)
+            update(Beat).where(Beat.id == beat_id).values(play_count=Beat.play_count + 1).returning(Beat.play_count)
         )
         await self.db.commit()
         return result.scalar_one()
@@ -174,7 +171,9 @@ class PurchaseRepo:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create(self, beat_id: uuid.UUID, buyer_id: uuid.UUID, amount=None, license_type: str = "basic") -> Purchase:
+    async def create(
+        self, beat_id: uuid.UUID, buyer_id: uuid.UUID, amount=None, license_type: str = "basic"
+    ) -> Purchase:
         purchase = Purchase(beat_id=beat_id, buyer_id=buyer_id, license_type=license_type, amount=amount)
         self.db.add(purchase)
         await self.db.commit()
@@ -186,10 +185,8 @@ class PurchaseRepo:
         result = await self.db.execute(query)
         return result.scalar_one() > 0
 
-    async def get_by_beat_and_buyer(self, beat_id: uuid.UUID, buyer_id: uuid.UUID) -> Optional[Purchase]:
-        query = select(Purchase).where(
-            and_(Purchase.beat_id == beat_id, Purchase.buyer_id == buyer_id)
-        )
+    async def get_by_beat_and_buyer(self, beat_id: uuid.UUID, buyer_id: uuid.UUID) -> Purchase | None:
+        query = select(Purchase).where(and_(Purchase.beat_id == beat_id, Purchase.buyer_id == buyer_id))
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
@@ -237,13 +234,11 @@ class PaymentRepo:
         await self.db.refresh(record)
         return record
 
-    async def get_by_id(self, payment_id: str) -> Optional[Payment]:
+    async def get_by_id(self, payment_id: str) -> Payment | None:
         result = await self.db.execute(select(Payment).where(Payment.id == payment_id))
         return result.scalar_one_or_none()
 
-    async def get_pending_by_beat_and_buyer(
-        self, beat_id: uuid.UUID, buyer_id: uuid.UUID
-    ) -> Optional[Payment]:
+    async def get_pending_by_beat_and_buyer(self, beat_id: uuid.UUID, buyer_id: uuid.UUID) -> Payment | None:
         result = await self.db.execute(
             select(Payment).where(
                 and_(
@@ -256,9 +251,7 @@ class PaymentRepo:
         return result.scalar_one_or_none()
 
     async def update_status(self, payment_id: str, new_status: str) -> None:
-        await self.db.execute(
-            update(Payment).where(Payment.id == payment_id).values(status=new_status)
-        )
+        await self.db.execute(update(Payment).where(Payment.id == payment_id).values(status=new_status))
         await self.db.commit()
 
 
@@ -284,12 +277,10 @@ class LikeRepo:
         return liked, count
 
     async def _count(self, beat_id: uuid.UUID) -> int:
-        result = await self.db.execute(
-            select(func.count()).select_from(BeatLike).where(BeatLike.beat_id == beat_id)
-        )
+        result = await self.db.execute(select(func.count()).select_from(BeatLike).where(BeatLike.beat_id == beat_id))
         return result.scalar_one()
 
-    async def get_counts(self, beat_ids: List[uuid.UUID]) -> dict[uuid.UUID, int]:
+    async def get_counts(self, beat_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
         if not beat_ids:
             return {}
         result = await self.db.execute(
@@ -299,17 +290,15 @@ class LikeRepo:
         )
         return {row.beat_id: row.cnt for row in result}
 
-    async def get_liked_set(self, user_id: uuid.UUID, beat_ids: List[uuid.UUID]) -> set[uuid.UUID]:
+    async def get_liked_set(self, user_id: uuid.UUID, beat_ids: list[uuid.UUID]) -> set[uuid.UUID]:
         if not beat_ids:
             return set()
         result = await self.db.execute(
-            select(BeatLike.beat_id).where(
-                and_(BeatLike.user_id == user_id, BeatLike.beat_id.in_(beat_ids))
-            )
+            select(BeatLike.beat_id).where(and_(BeatLike.user_id == user_id, BeatLike.beat_id.in_(beat_ids)))
         )
         return {row.beat_id for row in result}
 
-    async def get_liked_beats(self, user_id: uuid.UUID) -> List[Beat]:
+    async def get_liked_beats(self, user_id: uuid.UUID) -> list[Beat]:
         result = await self.db.execute(
             select(Beat)
             .join(BeatLike, BeatLike.beat_id == Beat.id)
@@ -323,10 +312,8 @@ class UserVoiceTagRepo:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_user(self, user_id: uuid.UUID) -> Optional[UserVoiceTag]:
-        result = await self.db.execute(
-            select(UserVoiceTag).where(UserVoiceTag.user_id == user_id)
-        )
+    async def get_by_user(self, user_id: uuid.UUID) -> UserVoiceTag | None:
+        result = await self.db.execute(select(UserVoiceTag).where(UserVoiceTag.user_id == user_id))
         return result.scalar_one_or_none()
 
     async def upsert(self, user_id: uuid.UUID, s3_key: str) -> UserVoiceTag:
@@ -340,7 +327,7 @@ class UserVoiceTagRepo:
         await self.db.refresh(record)
         return record
 
-    async def delete(self, user_id: uuid.UUID) -> Optional[str]:
+    async def delete(self, user_id: uuid.UUID) -> str | None:
         record = await self.get_by_user(user_id)
         if not record:
             return None

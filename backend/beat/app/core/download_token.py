@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
@@ -9,7 +9,7 @@ EXPIRE_SECONDS = 900  # 15 минут
 def create_download_token(beat_id: str, buyer_id: str, file_type: str = "wav") -> str:
     from config import settings
 
-    expire = datetime.now(timezone.utc) + timedelta(seconds=EXPIRE_SECONDS)
+    expire = datetime.now(UTC) + timedelta(seconds=EXPIRE_SECONDS)
     return jwt.encode(
         {
             "type": "download",
@@ -35,4 +35,4 @@ def verify_download_token(token: str) -> dict:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Недействительная или истёкшая ссылка для скачивания",
-        )
+        ) from None

@@ -1,16 +1,16 @@
 import uuid
-from typing import Optional
 
-from app.models.models import Profile, Follow
-from sqlalchemy import select, func, and_, exists
+from sqlalchemy import and_, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.models import Follow, Profile
 
 
 class ProfileRepo:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create_profile(self, user_id: uuid.UUID, username: Optional[str] = None) -> Profile:
+    async def create_profile(self, user_id: uuid.UUID, username: str | None = None) -> Profile:
         existing = await self.get_by_user_id(user_id)
         if existing:
             return existing
@@ -28,16 +28,14 @@ class ProfileRepo:
                 return existing
             raise
 
-    async def get_by_username(self, username: str) -> Optional[Profile]:
-        result = await self.db.execute(
-            select(Profile).where(func.lower(Profile.username) == username.lower())
-        )
+    async def get_by_username(self, username: str) -> Profile | None:
+        result = await self.db.execute(select(Profile).where(func.lower(Profile.username) == username.lower()))
         return result.scalar_one_or_none()
 
     async def is_username_available(self, username: str) -> bool:
         return await self.get_by_username(username) is None
 
-    async def get_by_user_id(self, user_id: uuid.UUID) -> Optional[Profile]:
+    async def get_by_user_id(self, user_id: uuid.UUID) -> Profile | None:
         result = await self.db.execute(select(Profile).where(Profile.user_id == user_id))
         return result.scalar_one_or_none()
 
@@ -70,15 +68,11 @@ class FollowRepo:
         return is_following, followers_count
 
     async def _count_followers(self, user_id: uuid.UUID) -> int:
-        result = await self.db.execute(
-            select(func.count()).select_from(Follow).where(Follow.following_id == user_id)
-        )
+        result = await self.db.execute(select(func.count()).select_from(Follow).where(Follow.following_id == user_id))
         return result.scalar_one()
 
     async def _count_following(self, user_id: uuid.UUID) -> int:
-        result = await self.db.execute(
-            select(func.count()).select_from(Follow).where(Follow.follower_id == user_id)
-        )
+        result = await self.db.execute(select(func.count()).select_from(Follow).where(Follow.follower_id == user_id))
         return result.scalar_one()
 
     async def get_counts(self, user_id: uuid.UUID) -> tuple[int, int]:
@@ -88,8 +82,6 @@ class FollowRepo:
 
     async def is_following(self, follower_id: uuid.UUID, following_id: uuid.UUID) -> bool:
         result = await self.db.execute(
-            select(exists().where(
-                and_(Follow.follower_id == follower_id, Follow.following_id == following_id)
-            ))
+            select(exists().where(and_(Follow.follower_id == follower_id, Follow.following_id == following_id)))
         )
         return bool(result.scalar())

@@ -25,11 +25,7 @@ async def handle_username_changed(message: AbstractIncomingMessage):
         new_username = payload["new_username"]
 
         async with async_session() as db:
-            await db.execute(
-                update(Beat)
-                .where(Beat.author_id == author_id)
-                .values(author_name=new_username)
-            )
+            await db.execute(update(Beat).where(Beat.author_id == author_id).values(author_name=new_username))
             await db.commit()
 
         logger.info("author_name updated to '%s' for user %s", new_username, author_id)
@@ -44,33 +40,31 @@ async def handle_user_deleted(message: AbstractIncomingMessage):
             s3 = S3Storage()
 
             # All beats by this author (including soft-deleted)
-            result = await db.execute(
-                select(Beat).where(Beat.author_id == author_id)
-            )
+            result = await db.execute(select(Beat).where(Beat.author_id == author_id))
             beats = result.scalars().all()
 
             keys_to_delete: list[str] = []
 
             for beat in beats:
-                has_purchase = (await db.execute(
-                    select(Purchase).where(Purchase.beat_id == beat.id).limit(1)
-                )).scalar_one_or_none() is not None
+                has_purchase = (
+                    await db.execute(select(Purchase).where(Purchase.beat_id == beat.id).limit(1))
+                ).scalar_one_or_none() is not None
 
                 if has_purchase:
                     beat.author_name = None
                     db.add(beat)
                 else:
-                    keys_to_delete.extend(_real_s3_keys(
-                        beat.audio_preview_url,
-                        beat.audio_full_url,
-                        beat.cover_url,
-                    ))
+                    keys_to_delete.extend(
+                        _real_s3_keys(
+                            beat.audio_preview_url,
+                            beat.audio_full_url,
+                            beat.cover_url,
+                        )
+                    )
                     await db.delete(beat)
 
             # Voice tag
-            vt_result = await db.execute(
-                select(UserVoiceTag).where(UserVoiceTag.user_id == author_id)
-            )
+            vt_result = await db.execute(select(UserVoiceTag).where(UserVoiceTag.user_id == author_id))
             vt = vt_result.scalar_one_or_none()
             if vt:
                 keys_to_delete.append(vt.s3_key)

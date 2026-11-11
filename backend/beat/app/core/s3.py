@@ -21,10 +21,10 @@ class S3Storage:
     @asynccontextmanager
     async def _get_client(self):
         async with self.session.client(
-                "s3",
-                endpoint_url=self.endpoint_url,
-                aws_access_key_id=self.access_key,
-                aws_secret_access_key=self.secret_key,
+            "s3",
+            endpoint_url=self.endpoint_url,
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
         ) as client:
             yield client
 
@@ -41,11 +41,11 @@ class S3Storage:
             await client.head_bucket(Bucket=self.bucket_name)
 
     async def upload_file(
-            self,
-            file: UploadFile,
-            s3_path: str,
-            content_type: str | None = None,
-            cache_control: str | None = None,
+        self,
+        file: UploadFile,
+        s3_path: str,
+        content_type: str | None = None,
+        cache_control: str | None = None,
     ) -> str:
         async with self._get_client() as client:
             file_content = await file.read()
@@ -54,7 +54,7 @@ class S3Storage:
                 Bucket=self.bucket_name,
                 Key=s3_path,
                 Body=file_content,
-                ContentType=content_type or file.content_type or 'application/octet-stream',
+                ContentType=content_type or file.content_type or "application/octet-stream",
                 **extra,
             )
         return s3_path
@@ -67,12 +67,14 @@ class S3Storage:
         """
         policy = {
             "Version": "2012-10-17",
-            "Statement": [{
-                "Effect": "Allow",
-                "Principal": "*",
-                "Action": ["s3:GetObject"],
-                "Resource": [f"arn:aws:s3:::{self.bucket_name}/{prefix}" for prefix in prefixes],
-            }],
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": "*",
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{self.bucket_name}/{prefix}" for prefix in prefixes],
+                }
+            ],
         }
         async with self._get_client() as client:
             await client.put_bucket_policy(Bucket=self.bucket_name, Policy=json.dumps(policy))
@@ -86,7 +88,7 @@ class S3Storage:
     def _normalize_key(self, url_or_key: str) -> str:
         prefix = f"{self.endpoint_url}/{self.bucket_name}/"
         if url_or_key.startswith(prefix):
-            return url_or_key[len(prefix):]
+            return url_or_key[len(prefix) :]
         return url_or_key
 
     async def generate_presigned_url(self, s3_key: str, expires_in: int | None = None) -> str:
@@ -125,11 +127,7 @@ class S3Storage:
                     yield chunk
 
     async def delete_objects(self, keys: list[str]) -> None:
-        normalized_keys = [
-            self._normalize_key(key)
-            for key in keys
-            if key
-        ]
+        normalized_keys = [self._normalize_key(key) for key in keys if key]
         if not normalized_keys:
             return
 

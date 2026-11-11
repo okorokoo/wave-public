@@ -1,4 +1,5 @@
 """Unit tests for BeatService — upload validation and delete logic."""
+
 import uuid
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
@@ -6,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
+from app.constants import PREVIEW_PROCESSING
 from app.services.beat import BeatService
-from app.constants import PREVIEW_PROCESSING, BEAT_DELETED
 
 
 def _make_beat(
@@ -60,12 +61,14 @@ def _make_service():
 
 # ── upload_beat ────────────────────────────────────────────────────────────────
 
+
 class TestUploadBeat:
     async def test_mp3_file_raises_400(self):
         svc = _make_service()
         bad_file = _make_upload_file(content_type="audio/mpeg", filename="beat.mp3")
 
         from app.schemas.beat import BeatForm
+
         form = MagicMock(spec=BeatForm)
         form.title = "My Beat"
         form.bpm = 140
@@ -88,12 +91,14 @@ class TestUploadBeat:
         svc = _make_service()
 
         import app.services.beat as beat_module
+
         original = beat_module.settings.MAX_AUDIO_UPLOAD_BYTES
         beat_module.settings.MAX_AUDIO_UPLOAD_BYTES = 10
 
         big_file = _make_upload_file(size=20)
 
         from app.schemas.beat import BeatForm
+
         form = MagicMock(spec=BeatForm)
         form.title = "Big Beat"
         form.bpm = 140
@@ -116,6 +121,7 @@ class TestUploadBeat:
 
 
 # ── remove_beat ────────────────────────────────────────────────────────────────
+
 
 class TestRemoveBeat:
     async def test_beat_not_found_raises_404(self):

@@ -1,6 +1,7 @@
 import asyncio
+import contextlib
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -31,7 +32,7 @@ async def process_outbox_batch() -> int:
                     routing_key=event.routing_key,
                     body=event.payload,
                 )
-                event.published_at = datetime.now(timezone.utc)
+                event.published_at = datetime.now(UTC)
             except Exception as exc:
                 event.attempts += 1
                 event.last_error = str(exc)[:500]
@@ -47,7 +48,5 @@ async def outbox_publisher_loop(stop_event: asyncio.Event) -> None:
         except Exception as exc:
             logger.error("Outbox publisher error: %s", exc)
 
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(stop_event.wait(), timeout=POLL_INTERVAL_SECONDS)
-        except asyncio.TimeoutError:
-            pass
