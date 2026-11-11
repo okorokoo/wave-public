@@ -24,7 +24,7 @@ target-version = "py312"
 line-length = 120
 # Каждый сервис — отдельный корень импортов (app, config, schemas)
 src = ["backend/auth", "backend/beat", "backend/user"]
-extend-exclude = ["frontend", "**/migrations/versions"]
+extend-exclude = ["**/migrations/versions"]
 
 [tool.ruff.lint]
 select = [

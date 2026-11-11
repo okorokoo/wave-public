@@ -25,9 +25,4 @@ htmlcov/
 # Локальные данные
 /aws/minio_data
 
-# Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
-
 beats-catalog-functional-prototype*

@@ -15,7 +15,7 @@ graph TB
     Client[Browser / SPA]
 
     subgraph gateway [" "]
-        Nginx["nginx :80<br/>gateway + статика фронтенда"]
+        Nginx["nginx :80<br/>API-gateway"]
     end
 
     Client --> Nginx

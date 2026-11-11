@@ -5,7 +5,7 @@ Backend платформы, где музыкальные продюсеры п�
 и публикует бит в каталоге. Покупатель слушает превью, оплачивает через ЮKassa и получает
 доступ к полному WAV и стемам.
 
-Проект запущен в закрытой бете. Архитектура — три микросервиса на FastAPI, общающихся через JWT и
+Проект запущен в закрытой бете; в этом репозитории — backend (веб-клиент на React живёт отдельно). Архитектура — три микросервиса на FastAPI, общающихся через JWT и
 события RabbitMQ; у каждого сервиса своя база PostgreSQL.
 
 ## Стек
@@ -21,13 +21,12 @@ Backend платформы, где музыкальные продюсеры п�
 | Инфраструктура | Docker Compose, nginx (API-gateway) |
 | Наблюдаемость | Prometheus, Grafana, Loki, Promtail |
 | Качество кода | pytest, ruff, mypy, pre-commit, gitleaks |
-| Frontend (демо-клиент) | React 18, TypeScript, Vite |
 
 ## Архитектура
 
 ```mermaid
 graph TB
-    Client[Браузер / SPA] --> Nginx["nginx :80<br/>API-gateway + статика"]
+    Client[Клиент] --> Nginx["nginx :80<br/>API-gateway"]
 
     Nginx -->|/auth/*| Auth[auth-service]
     Nginx -->|/users/*| User[user-service]
@@ -64,7 +63,7 @@ graph TB
 | **user-service** | Профили, аватары, подписки (follow). Создаёт/удаляет профиль по событиям от auth |
 | **beat-service** | Каталог и поиск битов, загрузка, лайки, прослушивания, покупки и платежи ЮKassa, выдача файлов купившим |
 | **beat-worker** | Фоновая обработка аудио из очереди: превью с войс-тегом, MP3, загрузка в S3 |
-| **nginx** | Единая точка входа: маршрутизация по префиксу, отдача собранного фронтенда |
+| **nginx** | Единая точка входа: маршрутизация по префиксу на нужный сервис |
 
 Сервисы не ходят друг к другу по HTTP: данные пользователя берутся из JWT, а изменения
 распространяются событиями через RabbitMQ. Подробнее, с диаграммами покупки и выдачи файлов —
@@ -86,7 +85,7 @@ docker compose up --build
 
 | Что | Адрес |
 |---|---|
-| Приложение | http://localhost |
+| API-gateway | http://localhost |
 | Swagger: auth / users / beats | http://localhost/auth/docs · http://localhost/users/docs · http://localhost/beats/docs |
 | Mailpit (письма подтверждения email) | http://localhost:8025 |
 | RabbitMQ (wave / wave) | http://localhost:15672 |
@@ -135,8 +134,8 @@ backend/
   auth/  user/  beat/        # сервисы: app/, migrations/, tests/, Dockerfile
   nginx/nginx.conf           # маршрутизация API-gateway
 deploy/postgres/             # создание баз при первом старте Postgres
+deploy/vps-cloudflared/      # конфиг Cloudflare Tunnel для прод-релея
 docs/                        # архитектура и roadmap
-frontend/                    # SPA-клиент (React + TypeScript)
 monitoring/                  # конфиги Prometheus, Loki, Promtail, дашборд Grafana
 docker-compose.yml
 ```
