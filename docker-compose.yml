@@ -72,7 +72,7 @@ services:
     ports:
       - "15672:15672"  # веб-интерфейс управления
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 10s
       timeout: 5s
       retries: 10
